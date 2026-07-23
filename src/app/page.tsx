@@ -1923,6 +1923,8 @@ export default function Home() {
           {activeTab === "dashboard" && (
           <Dashboard
             settings={settings}
+            courses={courses}
+            activeCourseId={activeCourseId}
             curriculum={curriculum}
             dailyLog={dailyLog}
             bookProgress={bookProgress}

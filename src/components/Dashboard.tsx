@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, CurriculumWeek, DailyLogEntry, BookProgress, VerseMemory, JapaEntry, ScheduleDay, TutorSession, isTutorSession, interpolateVerseTarget, Guna, LectureNote, DevoteeContact, SpiritualMaster, getExpectedHours, getAheadBehind, getAdjustedWeeklyTarget, getEffectiveHours, parseVerseRef, verseToAbsolutePosition } from "@/lib/data";
+import { Settings, Course, CurriculumWeek, DailyLogEntry, BookProgress, VerseMemory, JapaEntry, ScheduleDay, TutorSession, isTutorSession, interpolateVerseTarget, Guna, LectureNote, DevoteeContact, SpiritualMaster, getExpectedHours, getAheadBehind, getAdjustedWeeklyTarget, getEffectiveHours, parseVerseRef, verseToAbsolutePosition } from "@/lib/data";
+import { ActiveCoursesTracker } from "./ActiveCoursesTracker";
 import { getUpcomingVaisnavaEvents, fastLabels, fastDetails } from "@/lib/vaisnava-calendar";
 import { differenceInDays, parseISO, format, subDays } from "date-fns";
 import { BookCover } from "./BookProgressTab";
@@ -9,6 +10,8 @@ import { TrendingUp, TrendingDown, Clock, CheckCircle2, Target, Flame, Zap, Note
 
 interface Props {
   settings: Settings;
+  courses: Course[];
+  activeCourseId: string;
   curriculum: CurriculumWeek[];
   dailyLog: DailyLogEntry[];
   bookProgress: BookProgress[];
@@ -42,7 +45,7 @@ function DashboardSection({ title, icon, defaultOpen = true, children }: { title
   );
 }
 
-export function Dashboard({ settings, curriculum, dailyLog, bookProgress, verseMemory, japaLog, scheduleLog, tutorSessions, lectureNotes = [], contacts = [], spiritualMaster, onTabChange }: Props) {
+export function Dashboard({ settings, courses, activeCourseId, curriculum, dailyLog, bookProgress, verseMemory, japaLog, scheduleLog, tutorSessions, lectureNotes = [], contacts = [], spiritualMaster, onTabChange }: Props) {
   const today = new Date();
   const startDate = parseISO(settings.planStartDate);
   const daysSinceStart = Math.max(0, differenceInDays(today, startDate));
@@ -81,16 +84,20 @@ export function Dashboard({ settings, curriculum, dailyLog, bookProgress, verseM
         verseToAbsolutePosition(currentWeek.book, expectedRef.chapter, expectedRef.verse)
       : null;
 
-  const paceLabel =
-    positionDiff !== null
-      ? positionDiff >= 0
-        ? "🟢 On Track"
-        : "🔴 Behind"
-      : aheadBehind >= 0
-      ? "🟢 On Track"
-      : aheadBehind > -4
-      ? "🟡 Slightly Behind"
-      : "🔴 Behind";
+  // If previous weeks are incomplete, the user is not fully on track even if
+  // their latest reading happens to fall within the current week’s target.
+  const isWeekDone = (w: CurriculumWeek) =>
+    w.complete || /^Complete/i.test(w.paceStatus || "") || (w.actualHours >= w.targetHours);
+  const incompletePreviousWeeks = curriculum.filter((w) => w.week < currentWeekNum && !isWeekDone(w)).length;
+
+  const rawPositionOnTrack = positionDiff !== null ? positionDiff >= 0 : aheadBehind >= 0;
+  const paceLabel = (() => {
+    if (incompletePreviousWeeks > 1) return "� Behind";
+    if (incompletePreviousWeeks === 1) return rawPositionOnTrack ? "🟡 Catching Up" : "🔴 Behind";
+    if (positionDiff !== null) return positionDiff >= 0 ? "🟢 On Track" : "🔴 Behind";
+    if (aheadBehind >= 0) return "🟢 On Track";
+    return aheadBehind > -4 ? "🟡 Slightly Behind" : "🔴 Behind";
+  })();
 
   const isWeekend = today.getDay() === 0 || today.getDay() === 6;
   const dailyTarget = isWeekend ? settings.weekendTargetHours : settings.minimumDailyStudyHours;
@@ -229,6 +236,7 @@ export function Dashboard({ settings, curriculum, dailyLog, bookProgress, verseM
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
+      <ActiveCoursesTracker courses={courses} activeCourseId={activeCourseId} />
       <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-6">
         Śāstra Study Curriculum Dashboard
       </h2>
