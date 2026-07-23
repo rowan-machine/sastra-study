@@ -1,9 +1,10 @@
 "use client";
 
-import { DailyLogEntry, Settings, CurriculumWeek, interpolateVerseTarget } from "@/lib/data";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { DailyLogEntry, Settings, CurriculumWeek, JapaEntry, ScheduleDay, calcScore, getDayTargetHours, emptyDailyLogEntry, recalcDailyStudyComplete, getDailyVerseTarget, normalizeVerseInput, isValidVerseRef, parseVerseRef } from "@/lib/data";
+import { format, parseISO } from "date-fns";
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { StudyTimer } from "./StudyTimer";
+import { useState, useMemo } from "react";
 
 interface Props {
   dailyLog: DailyLogEntry[];
@@ -11,58 +12,45 @@ interface Props {
   settings: Settings;
   curriculum: CurriculumWeek[];
   courseBooks?: string[];
+  japaLog?: JapaEntry[];
+  setJapaLog?: (value: JapaEntry[] | ((prev: JapaEntry[]) => JapaEntry[])) => void;
+  scheduleLog?: ScheduleDay[];
+  setScheduleLog?: (value: ScheduleDay[] | ((prev: ScheduleDay[]) => ScheduleDay[])) => void;
 }
 
-const emptyEntry = (date: string): DailyLogEntry => ({
-  date,
-  book: "",
-  startLocation: "",
-  endLocation: "",
-  minutes: null,
-  hours: null,
-  sixteenRounds: false,
-  sanskrit: false,
-  wordMeanings: false,
-  translation: false,
-  purport: false,
-  marked: false,
-  reflection: false,
-  dailyStudyComplete: false,
-  quote: "",
-  realization: "",
-  notes: "",
-});
+const emptyEntry = emptyDailyLogEntry;
 
-function getDailyVerseTarget(curriculum: CurriculumWeek[], settings: Settings, dailyLog: DailyLogEntry[]): string {
-  const today = new Date();
-  const startDate = parseISO(settings.planStartDate);
-  const daysSinceStart = Math.max(0, differenceInDays(today, startDate));
-  const currentWeekNum = Math.min(32, Math.floor(daysSinceStart / 7) + 1);
-  const currentWeek = curriculum.find((w) => w.week === currentWeekNum);
-  if (!currentWeek) return "";
+const studyFocusLabels = [
+  "1 — Distracted",
+  "2 — Partially Present",
+  "3 — Steady Attention",
+  "4 — Deep Engagement",
+  "5 — Fully Absorbed",
+];
 
-  // Only show when behind
-  const totalHoursLogged = dailyLog.reduce((sum, e) => sum + (e.hours || 0), 0);
-  const expectedHours = (daysSinceStart / 7) * settings.weeklyTargetHours;
-  if (totalHoursLogged >= expectedHours) return "";
+const studyFocusDescriptions = [
+  "Mind is elsewhere — reading words but not absorbing meaning. Eyes move across the page mechanically. This happens to everyone; just noticing it is valuable. Try changing environment, reading aloud, or switching to a different section.",
+  "Partially present — you catch the general flow but miss subtle points. The purports feel long and your mind wanders midway through paragraphs. You may need to re-read sections. This is a normal working level for many days.",
+  "Steady attention — you follow the argument, remember key points, and can connect this reading to previous chapters. You notice new things in purports you may have read before. Your annotations are meaningful. Good, solid study.",
+  "Deep engagement — the text is speaking to you personally. You see connections across books, recall supporting verses naturally, and feel the subject matter touching your heart. Questions arise not from confusion but from deepening realization. This is the fruit of consistent sādhana.",
+  "Fully absorbed — samādhi in study. Time disappears, the material world recedes, and the words of the ācārya carry direct spiritual potency. Verses illuminate each other without effort. This level comes by the mercy of guru and Kṛṣṇa. Cherish it.",
+];
 
-  // Calculate what fraction of the week should be done by today
-  const weekStart = parseISO(currentWeek.startDate);
-  const dayOfWeek = differenceInDays(today, weekStart) + 1; // 1–7
-  const fractionNeeded = dayOfWeek / 7;
-
-  const verseTarget = interpolateVerseTarget(currentWeek.assignment, currentWeek.book, fractionNeeded);
-  if (!verseTarget) return "";
-
-  return `Catch up to ${verseTarget} today`;
-}
-
-export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, courseBooks }: Props) {
+export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, courseBooks, japaLog, setJapaLog, scheduleLog, setScheduleLog }: Props) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const endpointHint = getDailyVerseTarget(curriculum, settings, dailyLog);
 
-  // Auto-suggest start location from last entry's end location
-  const lastEndLocation = dailyLog.find((e) => e.endLocation)?.endLocation || "";
+  // Auto-suggest start location from the most recent end location
+  const lastEndLocation =
+    [...dailyLog]
+      .filter((e) => e.endLocation && parseVerseRef(e.endLocation))
+      .sort((a, b) => b.date.localeCompare(a.date))[0]?.endLocation || "";
+
+  // Sorted indices for descending date display (newest first)
+  const sortedIndices = useMemo(() =>
+    dailyLog.map((_, i) => i).sort((a, b) => (dailyLog[b].date || "").localeCompare(dailyLog[a].date || "")),
+    [dailyLog]
+  );
 
   const addEntry = () => {
     const today = format(new Date(), "yyyy-MM-dd");
@@ -73,21 +61,43 @@ export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, cours
   const updateEntry = (index: number, field: keyof DailyLogEntry, value: unknown) => {
     setDailyLog((prev) => {
       const updated = [...prev];
-      const entry = { ...updated[index], [field]: value };
+      let entry = { ...updated[index], [field]: value };
       if (field === "minutes" && typeof value === "number") {
         entry.hours = value / 60;
       }
-      // Auto-calc dailyStudyComplete
-      const meetsTime = (entry.hours || 0) >= settings.minimumDailyStudyHours;
-      entry.dailyStudyComplete =
-        entry.sanskrit &&
-        entry.wordMeanings &&
-        entry.translation &&
-        entry.purport &&
-        entry.marked &&
-        entry.reflection &&
-        meetsTime;
+      entry = recalcDailyStudyComplete(entry, settings);
       updated[index] = entry;
+
+      // Sync sixteenRounds to Japa and Schedule
+      if (field === "sixteenRounds" && setJapaLog && setScheduleLog) {
+        const date = entry.date;
+        const checked = value as boolean;
+        // Sync to Japa
+        setJapaLog((prevJapa) => {
+          const existing = prevJapa.find((j) => j.date === date);
+          if (existing) {
+            const rounds = checked ? Math.max(16, existing.rounds || 16) : (existing.rounds && existing.rounds >= 16 ? 0 : existing.rounds ?? 0);
+            return prevJapa.map((j) => j.date === date ? { ...j, rounds } : j);
+          } else if (checked) {
+            return [...prevJapa, { date, rounds: 16, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null }];
+          }
+          return prevJapa;
+        });
+        // Sync to Schedule
+        setScheduleLog((prevSched) => {
+          const existing = prevSched.find((s) => s.date === date);
+          if (existing && existing.sixteenRounds !== checked) {
+            return prevSched.map((s) => {
+              if (s.date !== date) return s;
+              const upd = { ...s, sixteenRounds: checked };
+              upd.score = calcScore(upd, upd.scheduleItemsSnapshot?.length ? upd.scheduleItemsSnapshot : settings.scheduleItems || [], undefined);
+              return upd;
+            });
+          }
+          return prevSched;
+        });
+      }
+
       return updated;
     });
   };
@@ -110,8 +120,18 @@ export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, cours
         </button>
       </div>
 
+      <StudyTimer
+        dailyLog={dailyLog}
+        setDailyLog={setDailyLog}
+        curriculum={curriculum}
+        settings={settings}
+        courseBooks={courseBooks}
+      />
+
       <div className="space-y-2">
-        {dailyLog.map((entry, idx) => (
+        {sortedIndices.map((idx) => {
+          const entry = dailyLog[idx];
+          return (
           <div
             key={`${entry.date}-${idx}`}
             className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 overflow-hidden"
@@ -179,7 +199,11 @@ export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, cours
                       type="text"
                       value={entry.startLocation}
                       onChange={(e) => updateEntry(idx, "startLocation", e.target.value)}
-                      className="input-field"
+                      onBlur={(e) => {
+                        const normalized = normalizeVerseInput(e.target.value);
+                        if (normalized !== e.target.value) updateEntry(idx, "startLocation", normalized);
+                      }}
+                      className={`input-field ${entry.startLocation && !isValidVerseRef(entry.startLocation) ? "ring-1 ring-amber-400" : ""}`}
                       placeholder={lastEndLocation ? `Continued from ${lastEndLocation}` : "e.g. 3.19"}
                     />
                   </Field>
@@ -188,7 +212,11 @@ export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, cours
                       type="text"
                       value={entry.endLocation}
                       onChange={(e) => updateEntry(idx, "endLocation", e.target.value)}
-                      className="input-field"
+                      onBlur={(e) => {
+                        const normalized = normalizeVerseInput(e.target.value);
+                        if (normalized !== e.target.value) updateEntry(idx, "endLocation", normalized);
+                      }}
+                      className={`input-field ${entry.endLocation && !isValidVerseRef(entry.endLocation) ? "ring-1 ring-amber-400" : ""}`}
                       placeholder={endpointHint || "e.g. 3.38 (last verse you finished)"}
                     />
                   </Field>
@@ -227,6 +255,37 @@ export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, cours
                   </div>
                 </div>
 
+                {/* Study Focus / Intensity */}
+                <div className="bg-amber-50 dark:bg-zinc-800/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                      Study Focus &amp; Intensity
+                    </label>
+                    <span className={`text-xs font-bold ${
+                      (entry.studyFocusLevel ?? 3) >= 4 ? "text-green-700 dark:text-green-300" :
+                      (entry.studyFocusLevel ?? 3) >= 3 ? "text-yellow-700 dark:text-yellow-300" :
+                      (entry.studyFocusLevel ?? 3) >= 2 ? "text-orange-700 dark:text-orange-300" :
+                      "text-red-700 dark:text-red-300"
+                    }`}>
+                      {studyFocusLabels[(entry.studyFocusLevel ?? 3) - 1]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs text-zinc-400 w-4 text-center">1</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={entry.studyFocusLevel ?? 3}
+                      onChange={(e) => updateEntry(idx, "studyFocusLevel", parseInt(e.target.value))}
+                      className="flex-1 accent-amber-600"
+                    />
+                    <span className="text-xs text-zinc-400 w-4 text-center">5</span>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-1 leading-relaxed">
+                    {studyFocusDescriptions[(entry.studyFocusLevel ?? 3) - 1]}
+                  </p>
+                </div>
 
                 <div className="flex justify-end">
                   <button
@@ -240,7 +299,8 @@ export function DailyLogTab({ dailyLog, setDailyLog, settings, curriculum, cours
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -1,41 +1,127 @@
 "use client";
 
-import { TutorSession } from "@/lib/data";
+import { TutorSession, isTutorSession, TutorSessionType, ScheduleDay, scheduleItems as defaultScheduleItems, calcScore } from "@/lib/data";
 import { format, parseISO } from "date-fns";
 import { Plus, Trash2, GraduationCap, Layers } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useId } from "react";
 
 interface Props {
   sessions: TutorSession[];
   setSessions: (value: TutorSession[] | ((prev: TutorSession[]) => TutorSession[])) => void;
+  scheduleLog?: ScheduleDay[];
+  setScheduleLog?: (value: ScheduleDay[] | ((prev: ScheduleDay[]) => ScheduleDay[])) => void;
 }
 
-export function TutorTab({ sessions, setSessions }: Props) {
+export function TutorTab({ sessions, setSessions, scheduleLog, setScheduleLog }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const idBase = useId().replace(/:/g, "-");
+  const sessionCounter = useRef(0);
 
   const addSession = () => {
     const newSession: TutorSession = {
-      id: `tutor-${Date.now()}`,
+      id: `tutor-${idBase}-${sessionCounter.current++}`,
       date: format(new Date(), "yyyy-MM-dd"),
       topic: "",
       duration: 60,
       notes: "",
       flashcardsReviewed: 0,
       flashcardsNew: 0,
+      sessionType: "tutor",
     };
     setSessions((prev) => [newSession, ...prev]);
     setExpandedId(newSession.id);
+    // Sync to schedule one-off item
+    syncScheduleForSession(newSession, true);
   };
 
   const updateSession = (id: string, field: keyof TutorSession, value: unknown) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
-    );
+    setSessions((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, [field]: value } : s));
+      const session = updated.find((s) => s.id === id);
+      if (session) {
+        syncScheduleForSession(session, true);
+      }
+      return updated;
+    });
   };
 
   const deleteSession = (id: string) => {
+    const session = sessions.find((s) => s.id === id);
     setSessions((prev) => prev.filter((s) => s.id !== id));
     setExpandedId(null);
+    if (session) {
+      syncScheduleForSession(session, false);
+    }
+  };
+
+  const syncScheduleForSession = (session: TutorSession, checked: boolean) => {
+    if (!setScheduleLog) return;
+    const key = session.sessionType === "flashcards" ? "flashcard-session" : "tutor-session";
+    const otherKey = session.sessionType === "flashcards" ? "tutor-session" : "flashcard-session";
+    setScheduleLog((prev) => {
+      const existing = prev.find((s) => s.date === session.date);
+      if (existing) {
+        const nextCustomItems = { ...existing.customItems };
+        if (checked) {
+          nextCustomItems[key] = true;
+          delete nextCustomItems[otherKey];
+        } else {
+          delete nextCustomItems[key];
+        }
+
+        // If the schedule entry was auto-created from the tutor log and is now empty, remove it
+        const isAutoEntry = existing.notes === "Auto-filled from Tutor Log";
+        const hasOtherData =
+          existing.wakeUp330 ||
+          existing.mangalaArati ||
+          existing.bhogaArati ||
+          existing.gauraArati ||
+          existing.morningStudy ||
+          existing.work ||
+          existing.personalStudy ||
+          existing.sanskritClass ||
+          existing.sleep9pm ||
+          existing.sixteenRounds ||
+          existing.obeisances ||
+          Object.keys(existing.habitTracking || {}).length > 0 ||
+          Object.keys(nextCustomItems).length > 0;
+        if (isAutoEntry && !hasOtherData) {
+          return prev.filter((s) => s.date !== session.date);
+        }
+
+        if (JSON.stringify(existing.customItems) === JSON.stringify(nextCustomItems)) return prev;
+        const updated = { ...existing, customItems: nextCustomItems };
+        updated.score = calcScore(updated, updated.scheduleItemsSnapshot?.length ? updated.scheduleItemsSnapshot : defaultScheduleItems, undefined);
+        return prev.map((s) => (s.date === session.date ? updated : s));
+      } else if (checked) {
+        const newEntry: ScheduleDay = {
+          date: session.date,
+          wakeUp330: false,
+          mangalaArati: false,
+          bhogaArati: false,
+          gauraArati: false,
+          morningStudy: false,
+          work: false,
+          personalStudy: false,
+          sanskritClass: false,
+          sleep9pm: false,
+          score: 0,
+          notes: "Auto-filled from Tutor Log",
+          noMeatEating: false,
+          noIntoxication: false,
+          noGambling: false,
+          noIllicitSex: false,
+          sixteenRounds: false,
+          obeisances: 0,
+          customItems: { [key]: true },
+          scheduleItemsSnapshot: defaultScheduleItems,
+          habitTracking: {},
+        };
+        newEntry.score = calcScore(newEntry, defaultScheduleItems, undefined);
+        return [...prev, newEntry].sort((a, b) => a.date.localeCompare(b.date));
+      }
+      return prev;
+    });
   };
 
   // Stats
@@ -49,7 +135,7 @@ export function TutorTab({ sessions, setSessions }: Props) {
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - today.getDay());
   const weekStartStr = format(weekStart, "yyyy-MM-dd");
-  const sessionsThisWeek = sessions.filter((s) => s.date >= weekStartStr).length;
+  const sessionsThisWeek = sessions.filter((s) => s.date >= weekStartStr && isTutorSession(s)).length;
 
   return (
     <div className="p-8">
@@ -142,6 +228,17 @@ export function TutorTab({ sessions, setSessions }: Props) {
                       onChange={(e) => updateSession(session.id, "date", e.target.value)}
                       className="input-field"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1">Session Type</label>
+                    <select
+                      value={session.sessionType || "tutor"}
+                      onChange={(e) => updateSession(session.id, "sessionType", e.target.value as TutorSessionType)}
+                      className="input-field"
+                    >
+                      <option value="tutor">Tutor Session</option>
+                      <option value="flashcards">Flashcard Creation / Review</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs text-zinc-500 mb-1">Topic</label>

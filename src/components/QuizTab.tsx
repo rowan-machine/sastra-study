@@ -1,14 +1,16 @@
 "use client";
 
-import { DailyLogEntry } from "@/lib/data";
+import { DailyLogEntry, QuizResult, getBookAbbreviation, parseVerseRef } from "@/lib/data";
 import { getVersesInRange } from "@/lib/verseDatabase";
 import { getPurportInsights, getPurportInsightsForChapters, PurportInsight } from "@/lib/purportDatabase";
-import { format, subDays } from "date-fns";
+import { format, subDays, parseISO, isWithinInterval, subDays as dateFnsSubDays } from "date-fns";
 import { useState, useMemo } from "react";
-import { Brain, RefreshCw, CheckCircle, XCircle, Trophy, Filter, BookOpen } from "lucide-react";
+import { Brain, RefreshCw, CheckCircle, XCircle, Trophy, Filter, BookOpen, TrendingUp, TrendingDown, Calendar, BarChart3, Target } from "lucide-react";
 
 interface Props {
   dailyLog: DailyLogEntry[];
+  quizHistory: QuizResult[];
+  setQuizHistory: (value: QuizResult[] | ((prev: QuizResult[]) => QuizResult[])) => void;
 }
 
 interface QuizQuestion {
@@ -20,6 +22,69 @@ interface QuizQuestion {
   verseRef: string;
   explanation: string;
   category?: string; // purport question category
+}
+
+// Parse a quiz verse ref (e.g. "BG 3.35", "SB 1.2.6", "CC-Madhya 7.128")
+function parseQuizRef(ref: string): { book: string; ch: number; v: number } | null {
+  const m = ref.trim().match(/^([A-Z]+(?:-[A-Za-z]+)?)\s+([\d.]+)$/);
+  if (!m) return null;
+  const book = m[1];
+  const parts = m[2].split(".").map(Number);
+  if (book === "SB" && parts.length === 3) return { book, ch: parts[1], v: parts[2] };
+  if (parts.length >= 2) return { book, ch: parts[0], v: parts[1] };
+  return null;
+}
+
+function verseAtOrBefore(target: { ch: number; v: number }, boundary: { ch: number; v: number }): boolean {
+  if (target.ch < boundary.ch) return true;
+  if (target.ch > boundary.ch) return false;
+  return target.v <= boundary.v;
+}
+
+function verseRank(loc: string): number {
+  const p = parseVerseRef(loc);
+  return p ? p.chapter * 1000 + (p.verse === 999 ? 999 : p.verse) : -1;
+}
+
+function getQuizBookAbbr(bookName: string): "BG" | "SB" | "BS" | "CC-Madhya" | null {
+  const abbr = getBookAbbreviation(bookName);
+  if (abbr === "BG" || abbr === "SB" || abbr === "BS" || abbr === "CC-Madhya") return abbr;
+  return null;
+}
+
+function getStudyBoundaries(dailyLog: DailyLogEntry[]): Record<string, { ch: number; v: number }> {
+  const sorted = [...dailyLog]
+    .filter((d) => d.startLocation || d.endLocation)
+    .sort((a, b) => {
+      const dateCmp = b.date.localeCompare(a.date);
+      if (dateCmp !== 0) return dateCmp;
+      return verseRank(b.endLocation || b.startLocation || "") - verseRank(a.endLocation || a.startLocation || "");
+    });
+  const boundaries: Record<string, { ch: number; v: number }> = {};
+  for (const entry of sorted) {
+    const book = getQuizBookAbbr(entry.book || "");
+    if (!book || boundaries[book]) continue;
+    const loc = entry.endLocation || entry.startLocation || "";
+    const parsed = parseVerseRef(loc);
+    if (!parsed) continue;
+    boundaries[book] = { ch: parsed.chapter, v: parsed.verse === 999 ? 999 : parsed.verse };
+  }
+  return boundaries;
+}
+
+function parsePurportRangeEnd(range: string): { ch: number; v: number } | null {
+  const parts = range.trim().split("-");
+  const start = parseVerseRef(parts[0].trim());
+  if (!start) return null;
+  const endRaw = parts[parts.length - 1].trim();
+  if (endRaw.includes(".")) {
+    const end = parseVerseRef(endRaw);
+    if (!end) return null;
+    return { ch: end.chapter, v: end.verse === 999 ? 999 : end.verse };
+  }
+  const v = parseInt(endRaw, 10);
+  if (isNaN(v)) return null;
+  return { ch: start.chapter, v };
 }
 
 // Helpers for generating quiz questions from verses
@@ -190,7 +255,172 @@ function generatePurportQuestions(
   return questions;
 }
 
-export function QuizTab({ dailyLog }: Props) {
+function QuizProgressView({ quizHistory, lastResult }: { quizHistory: QuizResult[]; lastResult?: QuizResult | null }) {
+  const sorted = useMemo(() => [...quizHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [quizHistory]);
+  const recent = useMemo(() => [...quizHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [quizHistory]);
+
+  const stats = useMemo(() => {
+    const all = sorted;
+    const total = all.length;
+    const avg = total > 0 ? all.reduce((sum, r) => sum + r.percentage, 0) / total : 0;
+    const best = total > 0 ? Math.max(...all.map((r) => r.percentage)) : 0;
+    const totalQuestions = all.reduce((sum, r) => sum + r.total, 0);
+    const totalCorrect = all.reduce((sum, r) => sum + r.score, 0);
+    const last7 = all.filter((r) => isWithinInterval(parseISO(r.quizDate), { start: dateFnsSubDays(new Date(), 7), end: new Date() }));
+    const avg7 = last7.length > 0 ? last7.reduce((sum, r) => sum + r.percentage, 0) / last7.length : 0;
+    const last5 = all.slice(-5);
+    const prev5 = all.slice(-10, -5);
+    const last5Avg = last5.length > 0 ? last5.reduce((sum, r) => sum + r.percentage, 0) / last5.length : 0;
+    const prev5Avg = prev5.length > 0 ? prev5.reduce((sum, r) => sum + r.percentage, 0) / prev5.length : 0;
+    const improvement = last5Avg && prev5Avg ? last5Avg - prev5Avg : 0;
+    return { total, avg, best, totalQuestions, totalCorrect, avg7, improvement, last5Avg, prev5Avg };
+  }, [sorted]);
+
+  const chartData = useMemo(() => {
+    return sorted.slice(-15);
+  }, [sorted]);
+
+  const typeStats = useMemo(() => {
+    const breakdown = quizHistory.flatMap((r) => r.questionBreakdown || []);
+    const map = new Map<string, { correct: number; total: number }>();
+    for (const q of breakdown) {
+      const existing = map.get(q.type) || { correct: 0, total: 0 };
+      existing.total += 1;
+      if (q.correct) existing.correct += 1;
+      map.set(q.type, existing);
+    }
+    return Array.from(map.entries()).map(([type, data]) => ({ type, ...data, pct: data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0 }));
+  }, [quizHistory]);
+
+  return (
+    <div className="space-y-6">
+      {lastResult && (
+        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/30 dark:to-yellow-950/20 rounded-xl border border-amber-300 dark:border-amber-800/50 p-6 text-center">
+          <Trophy size={40} className="mx-auto mb-2 text-amber-500" />
+          <h3 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-1">Quiz Complete!</h3>
+          <p className="text-3xl font-bold text-amber-700 dark:text-amber-300 mb-1">
+            {lastResult.score} / {lastResult.total}
+          </p>
+          <p className="text-sm text-amber-700 dark:text-amber-400">{lastResult.percentage}% correct</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4">
+          <p className="text-xs text-zinc-500 uppercase tracking-wide">Quizzes</p>
+          <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">{stats.total}</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4">
+          <p className="text-xs text-zinc-500 uppercase tracking-wide">Average</p>
+          <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">{stats.avg.toFixed(0)}%</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4">
+          <p className="text-xs text-zinc-500 uppercase tracking-wide">Best</p>
+          <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">{stats.best}%</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4">
+          <p className="text-xs text-zinc-500 uppercase tracking-wide">7-day Avg</p>
+          <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">{stats.avg7.toFixed(0)}%</p>
+        </div>
+      </div>
+
+      {stats.total >= 5 && (
+        <div className={`rounded-xl border p-4 flex items-center gap-3 ${
+          stats.improvement > 0
+            ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
+            : stats.improvement < 0
+            ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800"
+            : "bg-zinc-50 border-zinc-200 dark:bg-zinc-800/50 dark:border-zinc-700"
+        }`}>
+          {stats.improvement > 0 ? <TrendingUp size={20} className="text-green-600" /> : stats.improvement < 0 ? <TrendingDown size={20} className="text-red-600" /> : <Target size={20} className="text-zinc-500" />}
+          <div>
+            <p className={`text-sm font-medium ${stats.improvement > 0 ? "text-green-700 dark:text-green-300" : stats.improvement < 0 ? "text-red-700 dark:text-red-300" : "text-zinc-700 dark:text-zinc-300"}`}>
+              {stats.improvement > 0 ? "Improving" : stats.improvement < 0 ? "Declining" : "Holding steady"}
+            </p>
+            <p className="text-xs text-zinc-500">
+              Last 5 avg {stats.last5Avg.toFixed(0)}% vs previous 5 avg {stats.prev5Avg.toFixed(0)}%
+            </p>
+          </div>
+        </div>
+      )}
+
+      {chartData.length > 0 && (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 size={18} className="text-amber-600" />
+            <h3 className="font-semibold text-amber-900 dark:text-amber-100">Score Trend</h3>
+          </div>
+          <div className="flex items-end gap-2 h-40">
+            {chartData.map((r, i) => {
+              const pct = Number.isFinite(r.percentage) ? (r.percentage as number) : 0;
+              const height = Math.max(4, pct);
+              return (
+                <div key={r.id} className="flex-1 flex flex-col items-center gap-1 group">
+                  <div className="relative w-full flex justify-center">
+                    <div
+                      className="w-full max-w-[18px] bg-amber-500 rounded-t transition-all group-hover:bg-amber-400"
+                      style={{ height: `${height}%` }}
+                    />
+                    <div className="absolute bottom-full mb-1 hidden group-hover:block text-xs bg-zinc-800 text-white px-2 py-0.5 rounded whitespace-nowrap z-10">
+                      {format(parseISO(r.quizDate), "MMM d")}: {r.percentage}%
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-zinc-500 rotate-45 origin-left translate-y-1">{format(parseISO(r.quizDate), "M/d")}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {typeStats.length > 0 && (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-5">
+          <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-3">Performance by Question Type</h3>
+          <div className="space-y-2">
+            {typeStats.map((t) => (
+              <div key={t.type} className="flex items-center justify-between text-sm">
+                <span className="text-zinc-700 dark:text-zinc-300 capitalize">{t.type.replace("-", " ")}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">{t.correct}/{t.total}</span>
+                  <span className={`text-xs font-medium ${t.pct >= 70 ? "text-green-600" : t.pct >= 50 ? "text-amber-600" : "text-red-600"}`}>{t.pct}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar size={18} className="text-amber-600" />
+          <h3 className="font-semibold text-amber-900 dark:text-amber-100">Recent History</h3>
+        </div>
+        {recent.length === 0 ? (
+          <p className="text-sm text-zinc-500">No quiz history yet. Complete a quiz to start tracking your progress.</p>
+        ) : (
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {recent.map((r) => (
+              <div key={r.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{format(parseISO(r.quizDate), "MMM d, yyyy")}</p>
+                  <p className="text-xs text-zinc-500 capitalize">
+                    {r.mode === "recent" ? `Recent reading (${r.lookbackDays}d)` : `Custom: ${r.customBook} ${r.customChapters}`}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{r.percentage}%</p>
+                  <p className="text-xs text-zinc-500">{r.score}/{r.total}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function QuizTab({ dailyLog, quizHistory, setQuizHistory }: Props) {
   const [lookbackDays, setLookbackDays] = useState(3);
   const [customBook, setCustomBook] = useState("");
   const [customChapters, setCustomChapters] = useState("");
@@ -201,6 +431,8 @@ export function QuizTab({ dailyLog }: Props) {
   const [score, setScore] = useState(0);
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [quizMode, setQuizMode] = useState<"recent" | "custom">("recent");
+  const [view, setView] = useState<"setup" | "quiz" | "progress">("setup");
+  const [answerBreakdown, setAnswerBreakdown] = useState<{ type: string; category?: string; correct: boolean }[]>([]);
 
   // Derive reading range from recent daily log entries
   const recentReadings = useMemo(() => {
@@ -208,11 +440,15 @@ export function QuizTab({ dailyLog }: Props) {
     return dailyLog.filter((d) => d.date >= cutoff && (d.startLocation || d.endLocation));
   }, [dailyLog, lookbackDays]);
 
+  // Latest study log boundary per book so quizzes don't test past current reading
+  const studyBoundaries = useMemo(() => getStudyBoundaries(dailyLog), [dailyLog]);
+
   // Get verses from the reading range
   const availableVerses = useMemo(() => {
+    let allVerses: { ref: string; text: string }[] = [];
     if (quizMode === "custom" && customChapters) {
       // Parse custom chapters like "3-4" or "3,4,5"
-      const book = customBook || "BG";
+      const abbr = (customBook || "BG") as "BG" | "SB" | "BS" | "CC-Madhya";
       const chapters: number[] = [];
       const parts = customChapters.split(/[,\s]+/);
       for (const part of parts) {
@@ -224,40 +460,46 @@ export function QuizTab({ dailyLog }: Props) {
           if (!isNaN(n)) chapters.push(n);
         }
       }
-      let allVerses: { ref: string; text: string }[] = [];
       for (const ch of chapters) {
-        allVerses = [...allVerses, ...getVersesInRange(book === "SB" ? "SB" : "BG", ch, 1, ch, 99)];
+        allVerses = [...allVerses, ...getVersesInRange(abbr, ch, 1, ch, 99)];
       }
-      return allVerses;
+    } else {
+      // From recent readings
+      for (const entry of recentReadings) {
+        const abbr = getQuizBookAbbr(entry.book || "") || "BG";
+        const startMatch = entry.startLocation?.match(/(\d+)\.(\d+)/);
+        const endMatch = entry.endLocation?.match(/(\d+)\.(\d+)/);
+        if (startMatch && endMatch) {
+          allVerses = [
+            ...allVerses,
+            ...getVersesInRange(
+              abbr,
+              parseInt(startMatch[1]),
+              parseInt(startMatch[2]),
+              parseInt(endMatch[1]),
+              parseInt(endMatch[2])
+            ),
+          ];
+        } else if (startMatch) {
+          allVerses = [...allVerses, ...getVersesInRange(abbr, parseInt(startMatch[1]), parseInt(startMatch[2]), parseInt(startMatch[1]), 99)];
+        }
+      }
     }
 
-    // From recent readings
-    let allVerses: { ref: string; text: string }[] = [];
-    for (const entry of recentReadings) {
-      const bookPrefix = entry.book?.toLowerCase().includes("bhagavad") || entry.book?.toLowerCase().includes("gītā") || entry.book?.toLowerCase().includes("gita") ? "BG" : "SB";
-      const startMatch = entry.startLocation?.match(/(\d+)\.(\d+)/);
-      const endMatch = entry.endLocation?.match(/(\d+)\.(\d+)/);
-      if (startMatch && endMatch) {
-        const verses = getVersesInRange(
-          bookPrefix,
-          parseInt(startMatch[1]),
-          parseInt(startMatch[2]),
-          parseInt(endMatch[1]),
-          parseInt(endMatch[2])
-        );
-        allVerses = [...allVerses, ...verses];
-      } else if (startMatch) {
-        const verses = getVersesInRange(bookPrefix, parseInt(startMatch[1]), parseInt(startMatch[2]), parseInt(startMatch[1]), 99);
-        allVerses = [...allVerses, ...verses];
-      }
-    }
-    return allVerses;
-  }, [recentReadings, quizMode, customBook, customChapters]);
+    return allVerses.filter((v) => {
+      const parsed = parseQuizRef(v.ref);
+      if (!parsed) return true;
+      const boundary = studyBoundaries[parsed.book];
+      if (!boundary) return true;
+      return verseAtOrBefore({ ch: parsed.ch, v: parsed.v }, boundary);
+    });
+  }, [recentReadings, quizMode, customBook, customChapters, studyBoundaries]);
 
   // Get purport insights for the same reading range
   const availablePurportInsights = useMemo(() => {
+    let insights: PurportInsight[] = [];
     if (quizMode === "custom" && customChapters) {
-      const book = customBook || "BG";
+      const abbr = (customBook || "BG") as "BG" | "SB";
       const chapters: number[] = [];
       const parts = customChapters.split(/[,\s]+/);
       for (const part of parts) {
@@ -269,24 +511,33 @@ export function QuizTab({ dailyLog }: Props) {
           if (!isNaN(n)) chapters.push(n);
         }
       }
-      return getPurportInsightsForChapters(book === "SB" ? "SB" : "BG", chapters);
+      insights = getPurportInsightsForChapters(abbr, chapters);
+    } else {
+      // From recent readings — derive chapters
+      const chapters = new Set<number>();
+      let bookPrefix: "BG" | "SB" = "BG";
+      for (const entry of recentReadings) {
+        const abbr = getQuizBookAbbr(entry.book || "");
+        if (abbr === "BG" || abbr === "SB") bookPrefix = abbr;
+        const startMatch = entry.startLocation?.match(/(\d+)\./);
+        const endMatch = entry.endLocation?.match(/(\d+)\./);
+        if (startMatch) chapters.add(parseInt(startMatch[1]));
+        if (endMatch) chapters.add(parseInt(endMatch[1]));
+      }
+      if (chapters.size === 0) return [];
+      const minCh = Math.min(...chapters);
+      const maxCh = Math.max(...chapters);
+      insights = getPurportInsights(bookPrefix, minCh, maxCh);
     }
 
-    // From recent readings — derive chapters
-    const chapters = new Set<number>();
-    let bookPrefix: "BG" | "SB" = "BG";
-    for (const entry of recentReadings) {
-      bookPrefix = entry.book?.toLowerCase().includes("bhagavad") || entry.book?.toLowerCase().includes("gītā") || entry.book?.toLowerCase().includes("gita") ? "BG" : "SB";
-      const startMatch = entry.startLocation?.match(/(\d+)\./);
-      const endMatch = entry.endLocation?.match(/(\d+)\./);
-      if (startMatch) chapters.add(parseInt(startMatch[1]));
-      if (endMatch) chapters.add(parseInt(endMatch[1]));
-    }
-    if (chapters.size === 0) return [];
-    const minCh = Math.min(...chapters);
-    const maxCh = Math.max(...chapters);
-    return getPurportInsights(bookPrefix, minCh, maxCh);
-  }, [recentReadings, quizMode, customBook, customChapters]);
+    return insights.filter((insight) => {
+      const boundary = studyBoundaries[insight.book];
+      if (!boundary) return true;
+      const end = parsePurportRangeEnd(insight.verseRange);
+      if (!end) return true;
+      return verseAtOrBefore(end, boundary);
+    });
+  }, [recentReadings, quizMode, customBook, customChapters, studyBoundaries]);
 
   const startQuiz = (count: number = 10) => {
     // Mix verse questions and purport questions (~50/50 when both available)
@@ -303,34 +554,94 @@ export function QuizTab({ dailyLog }: Props) {
     setShowResult(false);
     setScore(0);
     setTotalAnswered(0);
+    setAnswerBreakdown([]);
+    setView("quiz");
   };
 
   const submitAnswer = (optionIdx: number) => {
+    const q = quizQuestions[currentIdx];
+    const isCorrect = optionIdx === q.correctIndex;
     setSelectedAnswer(optionIdx);
     setShowResult(true);
     setTotalAnswered((p) => p + 1);
-    if (optionIdx === quizQuestions[currentIdx].correctIndex) {
+    setAnswerBreakdown((prev) => [...prev, { type: q.type, category: q.category, correct: isCorrect }]);
+    if (isCorrect) {
       setScore((p) => p + 1);
     }
   };
 
+  const finishQuiz = () => {
+    const result: QuizResult = {
+      id: `qr-${Date.now()}`,
+      date: new Date().toISOString(),
+      quizDate: format(new Date(), "yyyy-MM-dd"),
+      score,
+      total: totalAnswered,
+      percentage: totalAnswered > 0 ? Math.round((score / totalAnswered) * 100) : 0,
+      mode: quizMode,
+      lookbackDays: quizMode === "recent" ? lookbackDays : undefined,
+      customBook: quizMode === "custom" ? customBook : undefined,
+      customChapters: quizMode === "custom" ? customChapters : undefined,
+      questionBreakdown: answerBreakdown,
+    };
+    setQuizHistory((prev) => [result, ...prev]);
+    setView("progress");
+  };
+
   const nextQuestion = () => {
-    setSelectedAnswer(null);
-    setShowResult(false);
-    setCurrentIdx((p) => p + 1);
+    if (currentIdx + 1 >= quizQuestions.length) {
+      finishQuiz();
+    } else {
+      setSelectedAnswer(null);
+      setShowResult(false);
+      setCurrentIdx((p) => p + 1);
+    }
   };
 
   const currentQ = quizQuestions[currentIdx];
   const quizComplete = quizQuestions.length > 0 && currentIdx >= quizQuestions.length;
 
+  const resetToSetup = () => {
+    setQuizQuestions([]);
+    setCurrentIdx(0);
+    setScore(0);
+    setTotalAnswered(0);
+    setSelectedAnswer(null);
+    setShowResult(false);
+    setAnswerBreakdown([]);
+    setView("setup");
+  };
+
+  const lastResult = quizHistory[0];
+
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-6">
-        Daily Reading Quiz
-      </h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+          Daily Reading Quiz
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView("setup")}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              view === "setup" ? "bg-amber-700 text-white" : "bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+            }`}
+          >
+            Take Quiz
+          </button>
+          <button
+            onClick={() => setView("progress")}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              view === "progress" ? "bg-amber-700 text-white" : "bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+            }`}
+          >
+            Progress
+          </button>
+        </div>
+      </div>
 
       {/* Quiz Setup */}
-      {quizQuestions.length === 0 && (
+      {view === "setup" && (
         <div className="space-y-6">
           {/* Mode Toggle */}
           <div className="flex gap-2">
@@ -417,7 +728,7 @@ export function QuizTab({ dailyLog }: Props) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1">Chapters (e.g. "3-4" or "1,2,3")</label>
+                  <label className="block text-xs text-zinc-500 mb-1">Chapters (e.g. &quot;3-4&quot; or &quot;1,2,3&quot;)</label>
                   <input
                     type="text"
                     value={customChapters}
@@ -474,8 +785,13 @@ export function QuizTab({ dailyLog }: Props) {
         </div>
       )}
 
+      {/* Progress view */}
+      {view === "progress" && (
+        <QuizProgressView quizHistory={quizHistory} lastResult={lastResult} />
+      )}
+
       {/* Quiz in progress */}
-      {currentQ && !quizComplete && (
+      {view === "quiz" && currentQ && !quizComplete && (
         <div className="space-y-6">
           {/* Progress */}
           <div className="flex items-center justify-between">
@@ -582,7 +898,7 @@ export function QuizTab({ dailyLog }: Props) {
       )}
 
       {/* Quiz Complete */}
-      {quizComplete && (
+      {view === "quiz" && quizComplete && (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-8 text-center">
           <Trophy size={48} className="mx-auto mb-4 text-amber-500" />
           <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">Quiz Complete!</h3>
@@ -607,7 +923,7 @@ export function QuizTab({ dailyLog }: Props) {
               Retry Same Range
             </button>
             <button
-              onClick={() => { setQuizQuestions([]); setCurrentIdx(0); setScore(0); setTotalAnswered(0); }}
+              onClick={resetToSetup}
               className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-lg text-sm font-medium hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors"
             >
               New Quiz

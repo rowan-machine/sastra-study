@@ -1,9 +1,9 @@
 "use client";
 
-import { VerseMemory, curriculumBooks } from "@/lib/data";
+import { VerseMemory, curriculumBooks, getBookAbbreviation, autoDetectPriority } from "@/lib/data";
 import { lookupVerse } from "@/lib/verseDatabase";
-import { useState, useEffect } from "react";
-import { Filter, Plus, Trash2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Filter, Plus, Search, Trash2 } from "lucide-react";
 
 interface Props {
   verseMemory: VerseMemory[];
@@ -19,19 +19,54 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   const [quickBook, setQuickBook] = useState<string>(curriculumBooks[0]);
   const [quickChapter, setQuickChapter] = useState("");
   const [quickVerse, setQuickVerse] = useState("");
+  const [bookSearch, setBookSearch] = useState("");
+  const [quickBookSearch, setQuickBookSearch] = useState("");
+  const [isQuickBookOpen, setIsQuickBookOpen] = useState(false);
+
+  const filteredBooks = useMemo(() => {
+    const term = bookSearch.trim().toLowerCase();
+    if (!term) return curriculumBooks;
+    return curriculumBooks.filter((b) => {
+      const lowerB = b.toLowerCase();
+      const abbr = getBookAbbreviation(b).toLowerCase();
+      return lowerB.includes(term) || term.includes(lowerB) || abbr.includes(term) || term.includes(abbr);
+    });
+  }, [bookSearch]);
+
+  const quickBookFiltered = useMemo(() => {
+    const term = quickBookSearch.trim().toLowerCase();
+    if (!term) return curriculumBooks;
+    return curriculumBooks.filter((b) => {
+      const lowerB = b.toLowerCase();
+      const abbr = getBookAbbreviation(b).toLowerCase();
+      return lowerB.includes(term) || term.includes(lowerB) || abbr.includes(term) || term.includes(abbr);
+    });
+  }, [quickBookSearch]);
+
+  // Close quick book dropdown when clicking outside
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-quickbook-dropdown]")) {
+        setIsQuickBookOpen(false);
+      }
+    };
+    window.addEventListener("click", onClick);
+    return () => window.removeEventListener("click", onClick);
+  }, []);
 
   useEffect(() => {
     if (focusVerseId) {
       const verse = verseMemory.find((v) => v.id === focusVerseId);
       if (verse) {
-        setFilterMonth(verse.monthPhase || "all");
-        setFilterBook(verse.source || "all");
-        setFilterPriority(verse.priority === "Core" ? "all" : verse.priority || "all");
-        // scroll after render
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
+          setFilterMonth(verse.monthPhase || "all");
+          setFilterBook(verse.source || "all");
+          setFilterPriority(verse.priority === "Core" ? "all" : verse.priority || "all");
           const el = document.getElementById(`verse-${focusVerseId}`);
           el?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 50);
+        }, 0);
+        return () => clearTimeout(timeout);
       }
       onFocusConsumed?.();
     }
@@ -42,7 +77,12 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   const filtered = verseMemory.filter((v) => {
     if (filterMonth !== "all" && v.monthPhase !== filterMonth) return false;
     if (filterPriority !== "all" && v.priority !== filterPriority) return false;
-    if (filterBook !== "all" && v.source !== filterBook) return false;
+    if (filterBook !== "all") {
+      const sameBook =
+        v.source === filterBook ||
+        getBookAbbreviation(v.source || "") === getBookAbbreviation(filterBook);
+      if (!sameBook) return false;
+    }
     return true;
   });
 
@@ -65,15 +105,11 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
     if (!ch) return;
     const v = quickVerse.trim();
     const passage = v ? `${ch}.${v}` : `Ch. ${ch}`;
-    const bookAbbr = quickBook.startsWith("Bhagavad") ? "BG" :
-      quickBook.startsWith("Śrīmad") ? "SB" :
-      quickBook.startsWith("Nectar of I") ? "NOI" :
-      quickBook.startsWith("Nectar of D") ? "NOD" :
-      quickBook.startsWith("Kṛṣṇa") ? "KB" :
-      quickBook.startsWith("Garga") ? "GS" : "";
+    const bookAbbr = getBookAbbreviation(quickBook);
     const label = bookAbbr ? `${bookAbbr} ${passage}` : `${quickBook} ${passage}`;
 
     const autoText = lookupVerse(label);
+    const detectedPriority = autoDetectPriority(label, quickBook);
     const newVerse: VerseMemory = {
       id: `v-${Date.now()}`,
       monthPhase: "Added while reading",
@@ -81,7 +117,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
       versePassage: label,
       verseText: autoText,
       theme: "",
-      priority: "Core",
+      priority: detectedPriority,
       learned: false,
       meaningUnderstood: false,
       canRecite: false,
@@ -118,24 +154,53 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
       <div className="mb-6 p-4 bg-amber-50 dark:bg-zinc-800/50 rounded-xl border border-amber-200 dark:border-zinc-700">
         <p className="text-xs font-medium text-amber-700 dark:text-amber-300 uppercase tracking-wide mb-2">Add verse to memorize</p>
         <div className="flex items-end gap-2 flex-wrap">
-          <div>
+          <div className="relative" data-quickbook-dropdown>
             <label className="block text-xs text-zinc-500 mb-1">Book</label>
-            <select
-              value={quickBook}
-              onChange={(e) => setQuickBook(e.target.value)}
-              className="input-field text-sm w-[140px]"
+            <button
+              type="button"
+              onClick={() => setIsQuickBookOpen((v) => !v)}
+              className="input-field text-sm w-[220px] text-left flex items-center justify-between"
+              aria-haspopup="listbox"
+              aria-expanded={isQuickBookOpen}
             >
-              {curriculumBooks.map((b) => {
-                const abbr = b.startsWith("Bhagavad") ? "BG" :
-                  b.startsWith("Śrīmad") ? "SB" :
-                  b.startsWith("Nectar of I") ? "NOI" :
-                  b.startsWith("Nectar of D") ? "NOD" :
-                  b.startsWith("Kṛṣṇa") ? "KB" :
-                  b.startsWith("Science") ? "SSR" :
-                  b.startsWith("Garga") ? "GS" : b;
-                return <option key={b} value={b}>{abbr}</option>;
-              })}
-            </select>
+              <span className="truncate">{getBookAbbreviation(quickBook) || quickBook}</span>
+              <Search size={12} className="text-zinc-400 flex-shrink-0 ml-2" />
+            </button>
+            {isQuickBookOpen && (
+              <div className="absolute z-20 mt-1 w-[280px] bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 p-2">
+                <div className="relative mb-1">
+                  <Search size={12} className="absolute left-2 top-2.5 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={quickBookSearch}
+                    onChange={(e) => setQuickBookSearch(e.target.value)}
+                    placeholder="Search books..."
+                    className="input-field text-sm w-full pl-7"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-48 overflow-auto">
+                  {quickBookFiltered.map((b) => {
+                    const abbr = getBookAbbreviation(b);
+                    return (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => {
+                          setQuickBook(b);
+                          setQuickBookSearch("");
+                          setIsQuickBookOpen(false);
+                        }}
+                        className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center justify-between hover:bg-amber-50 dark:hover:bg-zinc-800 ${b === quickBook ? "bg-amber-100 dark:bg-amber-900/20" : ""}`}
+                      >
+                        <span className="truncate pr-2" title={b}>{b}</span>
+                        {abbr && <span className="text-xs text-zinc-500 flex-shrink-0">{abbr}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs text-zinc-500 mb-1">Chapter</label>
@@ -174,16 +239,26 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
       {/* Filters */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
         <Filter size={16} className="text-zinc-500" />
-        <select
-          value={filterBook}
-          onChange={(e) => setFilterBook(e.target.value)}
-          className="input-field text-sm w-auto"
-        >
-          <option value="all">All Books</option>
-          {curriculumBooks.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
+        <div className="relative w-auto">
+          <select
+            value={filterBook}
+            onChange={(e) => setFilterBook(e.target.value)}
+            className="input-field text-sm w-auto"
+            title={bookSearch ? "Filtered by search" : "Filter by book"}
+          >
+            <option value="all">All Books</option>
+            {filteredBooks.map((b) => (
+              <option key={b} value={b}>[{getBookAbbreviation(b)}] {b}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={bookSearch}
+            onChange={(e) => setBookSearch(e.target.value)}
+            placeholder="Search..."
+            className="input-field text-sm w-32 mt-1 block"
+          />
+        </div>
         <select
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}

@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated / scratch files
+*.log
+lint*.json
+sb-canto-1-counts.json
+calendar-2026.txt
+kc2026.txt
+parse_kc.py
+translit-debug.ts
+translit-test.ts
+public/Downloads/

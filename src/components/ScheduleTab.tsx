@@ -1,7 +1,8 @@
 "use client";
 
-import { ScheduleDay, scheduleItems as defaultScheduleItems, JapaEntry, SadhanaStandards, Course, StandardsChangeEntry, Settings, Guna } from "@/lib/data";
-import { format, subDays, differenceInDays, parseISO } from "date-fns";
+import { ScheduleDay, scheduleItems as defaultScheduleItems, JapaEntry, SadhanaStandards, Course, StandardsChangeEntry, Settings, Guna, calcScore, TutorSession } from "@/lib/data";
+import { vaisnavaEvents, isKartikaDate } from "@/lib/vaisnava-calendar";
+import { format, subDays, differenceInDays, parseISO, startOfWeek, eachDayOfInterval, endOfWeek } from "date-fns";
 import { useState, useMemo, useEffect } from "react";
 import { Plus, Trophy, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 
@@ -15,45 +16,108 @@ interface Props {
   setCourses?: (value: Course[] | ((prev: Course[]) => Course[])) => void;
   settings: Settings;
   setSettings: (value: Settings | ((prev: Settings) => Settings)) => void;
+  tutorSessions?: TutorSession[];
+  setTutorSessions?: (value: TutorSession[] | ((prev: TutorSession[]) => TutorSession[])) => void;
 }
 
-function calcScore(entry: ScheduleDay, items: readonly { key: string }[]): number {
-  if (items.length === 0) return 0;
-  const completed = items.filter((item) => {
-    if (item.key in entry) {
-      return entry[item.key as keyof ScheduleDay] as boolean;
-    }
-    return entry.customItems?.[item.key] ?? false;
-  }).length;
-  return Math.round((completed / items.length) * 100);
+const customItemLabels: Record<string, string> = {
+  "sadhu-sanga": "Sadhu-sanga",
+  "extra-rounds": "Extra rounds",
+  "seva": "Seva",
+  "letter-writing": "Letter writing",
+  "scripture-study": "Extra scripture study",
+  "fasting": "Fasting",
+  "guest-hospitality": "Guest hospitality",
+  "home-pooja": "At-home pooja",
+  "attending-harinama": "Attending Harinama",
+  "attending-festival": "Attending festival",
+  "reading-about-deity": "Read about the person/deity",
+};
+
+function getDayEvents(date: string) {
+  return vaisnavaEvents.filter((e) => e.date === date);
+}
+
+// Names of events where extra rounds of japa are especially encouraged
+const extraRoundsEvents = [
+  "gaura purnima",
+  "janmashtami",
+  "nityananda trayodashi",
+  "radhastami",
+  "prabhupada",
+  "bhaktisiddhanta",
+  "vyasa puja",
+];
+
+function isExtraRoundsDay(dayEvents: { name: string; type: string }[]): boolean {
+  // Extra rounds on Ekadashi, appearance/disappearance days, and major festivals
+  if (dayEvents.some((e) => e.type === "ekadashi")) return true;
+  if (dayEvents.some((e) => e.type === "appearance" || e.type === "disappearance")) return true;
+  if (dayEvents.some((e) => extraRoundsEvents.some((k) => e.name.toLowerCase().includes(k)))) return true;
+  return false;
+}
+
+function getAutoCustomItems(date: string, settings: Settings): Record<string, boolean> {
+  const items: Record<string, boolean> = {};
+  const dayEvents = getDayEvents(date);
+
+  const isEkadashi = dayEvents.some((e) => e.type === "ekadashi");
+  const isFestival = dayEvents.some((e) => e.type !== "ekadashi");
+  const isAppearanceDisappearance = dayEvents.some((e) => e.type === "appearance" || e.type === "disappearance");
+
+  if (isEkadashi && settings.ekadashiFastingRequired !== false) {
+    items["fasting"] = false;
+  }
+  if (isFestival) {
+    items["attending-festival"] = false;
+  }
+  if (isAppearanceDisappearance) {
+    items["reading-about-deity"] = false;
+  }
+  // Extra rounds encouraged on sacred days and throughout Kārtika month
+  if (isExtraRoundsDay(dayEvents) || isKartikaDate(date)) {
+    items["extra-rounds"] = false;
+  }
+
+  return items;
 }
 
 const motivationalQuotes = [
-  "\"You have a right to perform your prescribed duty, but you are not entitled to the fruits of action.\" — BG 2.47",
-  "\"From wherever the mind wanders due to its flickering nature, one must withdraw it and bring it back under the control of the Self.\" — BG 6.26",
-  "\"He who is regulated in his habits of eating, sleeping, recreation and work can mitigate all material pains by practicing the yoga system.\" — BG 6.17",
-  "\"Whatever action a great man performs, common men follow. And whatever standards he sets by exemplary acts, all the world pursues.\" — BG 3.21",
-  "\"Work done as a sacrifice for Viṣṇu has to be performed, otherwise work causes bondage in this material world.\" — BG 3.9",
-  "\"The self-realized souls can impart knowledge unto you because they have seen the truth.\" — BG 4.34",
-  "\"A faithful man who is dedicated to transcendental knowledge and who subdues his senses quickly attains the supreme spiritual peace.\" — BG 4.39",
+  "\"He who is regulated in his habits of eating, sleeping, recreation and work can mitigate all material pains by practicing the yoga system.\" \u2014 BG 6.17",
+  "\"From wherever the mind wanders due to its flickering nature, one must certainly withdraw it and bring it back under the control of the Self.\" \u2014 BG 6.26",
+  "\"By practice of the stages of yoga one may gradually become free from material attachment.\" \u2014 SB 3.27.8 (purport)",
+  "\"One is understood to be in full knowledge whose every endeavor is devoid of desire for sense gratification. He is said by sages to be a worker for whom the reactions of work have been burned up by the fire of perfect knowledge.\" \u2014 BG 4.19",
+  "\"A person who has given up all desires for sense gratification, who lives free from desires, who has given up all sense of proprietorship and is devoid of false ego\u2014he alone can attain real peace.\" \u2014 BG 2.71",
+  "\"Even a man of knowledge acts according to his own nature, for everyone follows the nature he has acquired from the three modes. What can repression accomplish?\" \u2014 BG 3.33",
+  "\"In this endeavor there is no loss or diminution, and a little advancement on this path can protect one from the most dangerous type of fear.\" \u2014 BG 2.40",
 ];
 
-export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, sadhanaStandards, course, setCourses, settings, setSettings }: Props) {
+export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, sadhanaStandards, course, setCourses, settings, setSettings, tutorSessions, setTutorSessions }: Props) {
   const today = format(new Date(), "yyyy-MM-dd");
   const [viewDate, setViewDate] = useState(today);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const activeScheduleItems = settings.scheduleItems?.length ? settings.scheduleItems : defaultScheduleItems;
 
   const todayEntry = scheduleLog.find((e) => e.date === viewDate);
-  const entryScheduleItems = todayEntry?.scheduleItemsSnapshot?.length ? todayEntry.scheduleItemsSnapshot : activeScheduleItems;
+  const viewDay = new Date(viewDate + "T12:00").getDay();
+  const isSunday = viewDay === 0;
+  const isSaturday = viewDay === 6;
+  const isWeekend = isSaturday || isSunday;
+  const allEntryScheduleItems = todayEntry?.scheduleItemsSnapshot?.length ? todayEntry.scheduleItemsSnapshot : activeScheduleItems;
+  const entryScheduleItems = allEntryScheduleItems.filter((item) => {
+    if (item.sundayOnly && !isSunday) return false;
+    if ((item.weekdayOnly || item.key === "work") && isWeekend) return false;
+    return true;
+  });
 
   const goToDay = (offset: number) => {
     const current = new Date(viewDate + "T12:00");
     const next = new Date(current.getTime() + offset * 86400000);
     const nextStr = format(next, "yyyy-MM-dd");
-    if (nextStr > today) return;
     setViewDate(nextStr);
   };
+
+  const isFutureDate = viewDate > today;
 
   const onTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
@@ -75,6 +139,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
     const newDay: ScheduleDay = {
       date: viewDate,
       wakeUp330: false,
+      showerTilak: false,
       mangalaArati: false,
       bhogaArati: false,
       gauraArati: false,
@@ -90,17 +155,45 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
       noGambling: false,
       noIllicitSex: false,
       sixteenRounds: false,
-      customItems: {},
+      obeisances: 0,
+      customItems: { ...getAutoCustomItems(viewDate, settings) },
       scheduleItemsSnapshot: activeScheduleItems,
       habitTracking: {},
     };
+    newDay.score = calcScore(newDay, entryScheduleItems, course?.sadhanaStandards?.obeisancesTarget);
     setScheduleLog((prev) => [newDay, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
   };
+
+  // Ensure one-off event trackers are present on existing days when viewing them
+  useEffect(() => {
+    if (!todayEntry) return;
+    const autoItems = getAutoCustomItems(viewDate, settings);
+    const missingKeys = Object.keys(autoItems).filter((key) => todayEntry.customItems?.[key] === undefined);
+    if (missingKeys.length === 0) return;
+
+    setScheduleLog((prev) =>
+      prev.map((entry) => {
+        if (entry.date !== viewDate) return entry;
+        const updatedCustomItems = { ...entry.customItems };
+        for (const key of missingKeys) {
+          updatedCustomItems[key] = false;
+        }
+        const updated = { ...entry, customItems: updatedCustomItems };
+        updated.score = calcScore(updated, entryScheduleItems, course?.sadhanaStandards?.obeisancesTarget);
+        return updated;
+      })
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewDate, settings.ekadashiFastingRequired]);
 
   const aratiKeys = ["mangalaArati", "bhogaArati", "gauraArati"];
 
   const toggleItem = (key: string) => {
-    const newVal = todayEntry ? !todayEntry[key as keyof ScheduleDay] : true;
+    const newVal = todayEntry
+      ? key in todayEntry
+        ? !(todayEntry[key as keyof ScheduleDay] as boolean)
+        : !(todayEntry.customItems?.[key] ?? false)
+      : true;
 
     setScheduleLog((prev) =>
       prev.map((e) => {
@@ -109,8 +202,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
         const updated = isCustom
           ? { ...e, customItems: { ...e.customItems, [key]: newVal } }
           : { ...e, [key]: newVal };
-        const itemsForDay = e.scheduleItemsSnapshot?.length ? e.scheduleItemsSnapshot : entryScheduleItems;
-        updated.score = calcScore(updated, itemsForDay);
+        updated.score = calcScore(updated, entryScheduleItems, course?.sadhanaStandards?.obeisancesTarget);
         return updated;
       })
     );
@@ -124,6 +216,39 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
         } else {
           return [...prev, { date: viewDate, rounds: null, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null, [key]: newVal }];
         }
+      });
+    }
+
+    // Sync 16 rounds completion to Japa tracker
+    if (key === "sixteenRounds") {
+      setJapaLog((prev) => {
+        const existing = prev.find((j) => j.date === viewDate);
+        if (existing) {
+          const rounds = newVal ? Math.max(16, existing.rounds || 16) : (existing.rounds && existing.rounds >= 16 ? 0 : existing.rounds ?? 0);
+          return prev.map((j) => j.date === viewDate ? { ...j, rounds } : j);
+        } else {
+          return [...prev, { date: viewDate, rounds: newVal ? 16 : null, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null }];
+        }
+      });
+    }
+
+    // Sync tutor/flashcard one-off items to Tutor log
+    if ((key === "tutor-session" || key === "flashcard-session") && newVal && setTutorSessions) {
+      const sessionType = key === "flashcard-session" ? "flashcards" : "tutor";
+      setTutorSessions((prev) => {
+        const existing = prev.find((s) => s.date === viewDate && s.sessionType === sessionType);
+        if (existing) return prev;
+        const newSession: TutorSession = {
+          id: `tutor-${Date.now()}`,
+          date: viewDate,
+          topic: sessionType === "flashcards" ? "Flashcard session" : "Tutor session",
+          duration: 60,
+          notes: "",
+          flashcardsReviewed: 0,
+          flashcardsNew: 0,
+          sessionType,
+        };
+        return [newSession, ...prev].sort((a, b) => b.date.localeCompare(a.date));
       });
     }
   };
@@ -148,9 +273,11 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
     );
   };
 
-  // Week stats
-  const last7 = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), "yyyy-MM-dd"));
-  const weekEntries = scheduleLog.filter((e) => last7.includes(e.date));
+  // Week stats (Monday–Sunday to match curriculum weeks)
+  const thisWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const thisWeekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+  const thisWeekDates = eachDayOfInterval({ start: thisWeekStart, end: thisWeekEnd }).map((d) => format(d, "yyyy-MM-dd"));
+  const weekEntries = scheduleLog.filter((e) => thisWeekDates.includes(e.date));
   const avgScore = weekEntries.length > 0
     ? Math.round(weekEntries.reduce((sum, e) => sum + e.score, 0) / weekEntries.length)
     : 0;
@@ -224,6 +351,21 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
       };
     }
 
+    // Auto-raise obeisances target (max 3)
+    if (sadhanaStandards.obeisancesTarget < 3 && allAboveMin && last14Entries.length >= 12) {
+      const allMetObeisances = last14Entries.every((e) => (e.obeisances || 0) >= sadhanaStandards.obeisancesTarget);
+      if (allMetObeisances) {
+        const newTarget = Math.min(3, sadhanaStandards.obeisancesTarget + 1);
+        if (newTarget <= baseline.obeisancesTarget) return null;
+        return {
+          field: "obeisancesTarget" as const,
+          oldValue: sadhanaStandards.obeisancesTarget,
+          newValue: newTarget,
+          message: `Your positive progress streak has automatically raised the obeisances target from ${sadhanaStandards.obeisancesTarget} to ${newTarget} per day.`,
+        };
+      }
+    }
+
     return null;
   }, [sadhanaStandards, course, setCourses, scheduleLog]);
 
@@ -237,26 +379,32 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
         newValue,
         direction: "up",
       };
-      setCourses((prev) => prev.map((c) => {
-        if (c.id !== course.id) return c;
-        return {
-          ...c,
-          sadhanaStandards: {
+      const timeout = setTimeout(() => {
+        setCourses((prev) => prev.map((c) => {
+          if (c.id !== course.id) return c;
+          const updated = {
             ...c.sadhanaStandards,
             [field]: newValue,
-            description: `${field === "minScorePercent" ? newValue : c.sadhanaStandards.minScorePercent}% daily min, ${field === "weeklyMinDays" ? newValue : c.sadhanaStandards.weeklyMinDays} days/week`,
-          },
-          standardsHistory: [...c.standardsHistory, entry],
-        };
-      }));
-      setAutoRaisedAlert({ message, newValue: String(newValue) });
+          };
+          return {
+            ...c,
+            sadhanaStandards: {
+              ...updated,
+              description: `${updated.minScorePercent}% daily min, ${updated.weeklyMinDays} days/week, ${updated.obeisancesTarget} obeisance${updated.obeisancesTarget !== 1 ? "s" : ""}/day`,
+            },
+            standardsHistory: [...c.standardsHistory, entry],
+          };
+        }));
+        setAutoRaisedAlert({ message, newValue: String(newValue) });
+      }, 0);
+      return () => clearTimeout(timeout);
     }
   }, [standardRaiseAlert, course, setCourses]);
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100">Daily Schedule</h2>
+        <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100">Daily Sādhanā</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => goToDay(-1)}
@@ -269,17 +417,15 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
           <input
             type="date"
             value={viewDate}
-            max={today}
             onChange={(e) => {
               const val = e.target.value;
-              if (val && val <= today) setViewDate(val);
+              if (val) setViewDate(val);
             }}
             className="input-field w-auto"
           />
           <button
             onClick={() => goToDay(1)}
-            disabled={viewDate === today}
-            className={`p-2 rounded-lg ${viewDate === today ? "opacity-50 cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"}`}
+            className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
             aria-label="Next day"
             title="Next day"
           >
@@ -322,7 +468,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4 text-center">
           <TrendingUp size={20} className="mx-auto mb-1 text-green-500" />
           <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{avgScore}%</p>
-          <p className="text-xs text-zinc-500">7-Day Average</p>
+          <p className="text-xs text-zinc-500">Week Avg (Mon–Sun)</p>
         </div>
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4 text-center">
           <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -335,9 +481,8 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
       {/* Sādhana Standards Accountability */}
       {sadhanaStandards && (
         (() => {
-          const last7Dates = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), "yyyy-MM-dd"));
-          const last7Entries = scheduleLog.filter((e) => last7Dates.includes(e.date));
-          const daysAtStandard = last7Entries.filter((e) => e.score >= sadhanaStandards.minScorePercent).length;
+          const weekStdEntries = scheduleLog.filter((e) => thisWeekDates.includes(e.date));
+          const daysAtStandard = weekStdEntries.filter((e) => e.score >= sadhanaStandards.minScorePercent).length;
           const meetsWeeklyGoal = daysAtStandard >= sadhanaStandards.weeklyMinDays;
 
           // Check required items for today
@@ -363,7 +508,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-zinc-500 dark:text-zinc-400">This week:</span>{" "}
+                  <span className="text-zinc-500 dark:text-zinc-400">This week <span className="text-xs">(Mon–Sun)</span>:</span>{" "}
                   <span className={`font-bold ${daysAtStandard >= sadhanaStandards.weeklyMinDays ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"}`}>
                     {daysAtStandard}/{sadhanaStandards.weeklyMinDays} days
                   </span>
@@ -454,7 +599,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
                 >
                   <span className="text-lg">✨</span>
                   <span className={`text-sm font-medium flex-1 ${checked ? "text-green-800 dark:text-green-200 line-through" : "text-zinc-700 dark:text-zinc-300"}`}>
-                    {key}
+                    {customItemLabels[key] || key}
                   </span>
                   <span className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
                     checked ? "bg-green-500 border-green-500 text-white" : "border-zinc-300 dark:border-zinc-600"
@@ -494,6 +639,10 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
               <option value="scripture-study">Extra scripture study</option>
               <option value="fasting">Fasting</option>
               <option value="guest-hospitality">Guest hospitality</option>
+              <option value="home-pooja">At-home pooja</option>
+              <option value="attending-harinama">Attending Harinama</option>
+              <option value="tutor-session">Tutor session</option>
+              <option value="flashcard-session">Flashcard session</option>
             </select>
             <input
               type="text"
@@ -582,6 +731,64 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
                     </button>
                   );
                 })}
+                {/* Obeisances counter with 1/2/3 checkmarks */}
+                {(() => {
+                  const target = course.sadhanaStandards?.obeisancesTarget || 1;
+                  const count = Math.min(3, Math.max(0, todayEntry.obeisances || 0));
+                  const met = count >= target;
+                  const isStrict = course.regulativePrinciples.mode === "non-negotiable";
+                  return (
+                    <div
+                      className={`col-span-1 sm:col-span-2 w-full flex flex-col gap-2 p-2 rounded-lg transition-colors ${
+                        met
+                          ? isStrict
+                            ? "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+                            : "bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800"
+                          : isStrict
+                          ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30"
+                          : "bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-medium ${met ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-600 dark:text-zinc-400"}`}>
+                          Obeisances {target}/day target
+                        </span>
+                        <span className={`text-xs ${met ? "text-green-600 dark:text-green-300" : "text-zinc-400"}`}>
+                          {met ? "✓ met" : `${count}/${target}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {[1, 2, 3].map((n) => (
+                          <button
+                            key={n}
+                            onClick={() => {
+                              setScheduleLog((prev) =>
+                                prev.map((e) => {
+                                  if (e.date !== viewDate) return e;
+                                  const nextCount = e.obeisances === n ? n - 1 : n;
+                                  const updated: ScheduleDay = { ...e, obeisances: Math.max(0, Math.min(3, nextCount)) };
+                                  const itemsForDay = e.scheduleItemsSnapshot?.length ? e.scheduleItemsSnapshot : entryScheduleItems;
+                                  updated.score = calcScore(updated, itemsForDay, course?.sadhanaStandards?.obeisancesTarget);
+                                  return updated;
+                                })
+                              );
+                            }}
+                            className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${
+                              count >= n
+                                ? isStrict
+                                  ? "bg-green-500 text-white"
+                                  : "bg-blue-500 text-white"
+                                : "bg-zinc-100 dark:bg-zinc-700 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600"
+                            }`}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                        <span className="text-xs text-zinc-400 ml-1">click count</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               {course.regulativePrinciples.mode === "tracking" && (
                 <p className="text-xs text-zinc-400 mt-2">
@@ -657,6 +864,58 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
             />
           </div>
         </div>
+      ) : isFutureDate ? (
+        /* Read-only future day preview showing upcoming events and auto-items */
+        (() => {
+          const futureAutoItems = getAutoCustomItems(viewDate, settings);
+          const dayEvents = getDayEvents(viewDate);
+          const hasContent = Object.keys(futureAutoItems).length > 0 || dayEvents.length > 0;
+          return (
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-indigo-200 dark:border-indigo-800/50 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">Preview</span>
+                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {format(new Date(viewDate + "T12:00"), "EEEE, MMM d")}
+                </h3>
+              </div>
+              {dayEvents.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {dayEvents.map((ev) => (
+                    <div key={ev.id} className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+                      <span className="text-sm">{ev.type === "ekadashi" ? "🌙" : ev.type === "appearance" ? "⭐" : ev.type === "disappearance" ? "💐" : "🎉"}</span>
+                      <div>
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-100">{ev.name}</p>
+                        {ev.fastType && ev.fastType !== "none" && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">Fast: {ev.fastType.replace("till-", "until ")}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {Object.keys(futureAutoItems).length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-zinc-500 mb-2">Auto-added items for this day:</p>
+                  {Object.keys(futureAutoItems).map((key) => (
+                    <div
+                      key={key}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/50"
+                    >
+                      <span className="text-lg">✨</span>
+                      <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                        {customItemLabels[key] || key}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!hasContent && (
+                <p className="text-sm text-zinc-400 text-center py-4">No special events scheduled for this day.</p>
+              )}
+              <p className="text-xs text-zinc-400 mt-4 text-center">Future days are read-only. Come back on this day to track your sādhana.</p>
+            </div>
+          );
+        })()
       ) : (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-8 text-center">
           <p className="text-zinc-500 mb-3">No entry for this date yet.</p>
@@ -673,9 +932,9 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
       {/* Recent history */}
       {weekEntries.length > 1 && (
         <div className="mt-6">
-          <h3 className="text-sm font-medium text-zinc-500 mb-2">Recent Days</h3>
+          <h3 className="text-sm font-medium text-zinc-500 mb-2">This Week (Mon–Sun)</h3>
           <div className="flex gap-2">
-            {last7.map((d) => {
+            {thisWeekDates.map((d) => {
               const entry = scheduleLog.find((e) => e.date === d);
               const score = entry?.score ?? -1;
               return (
@@ -815,13 +1074,12 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
       {course && (
         (() => {
           const principleKeys = ["noMeatEating", "noIntoxication", "noGambling", "noIllicitSex", "sixteenRounds"] as (keyof ScheduleDay)[];
-          const last7Dates = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), "yyyy-MM-dd"));
-          const last7Entries = last7Dates
+          const weekPrincipleEntries = thisWeekDates
             .map((date) => scheduleLog.find((e) => e.date === date))
             .filter((e): e is ScheduleDay => !!e);
 
           const enabledPrinciples = principleKeys.filter((k) => course.regulativePrinciples.principles[k as keyof typeof course.regulativePrinciples.principles]);
-          if (enabledPrinciples.length === 0 || last7Entries.length === 0) return null;
+          if (enabledPrinciples.length === 0 || weekPrincipleEntries.length === 0) return null;
 
           const labels: Record<string, string> = {
             noMeatEating: "No meat / sattvic",
@@ -834,19 +1092,19 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
           return (
             <div className="mt-6 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5">
               <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mb-3">
-                Regulative Principles — Last 7 Days ({course.regulativePrinciples.mode === "non-negotiable" ? "vow" : "tracking"})
+                Regulative Principles — This Week ({course.regulativePrinciples.mode === "non-negotiable" ? "vow" : "tracking"})
               </h3>
               <div className="space-y-2">
                 {enabledPrinciples.map((key) => {
-                  const daysKept = last7Entries.filter((e) => e[key as keyof ScheduleDay]).length;
-                  const pct = Math.round((daysKept / last7Entries.length) * 100);
+                  const daysKept = weekPrincipleEntries.filter((e) => e[key as keyof ScheduleDay]).length;
+                  const pct = Math.round((daysKept / weekPrincipleEntries.length) * 100);
                   return (
                     <div key={key} className="flex items-center gap-3">
                       <span className="text-xs text-zinc-600 dark:text-zinc-400 w-28">{labels[key]}</span>
                       <div className="flex-1 h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            course.regulativePrinciples.mode === "non-negotiable" && daysKept < last7Entries.length
+                            course.regulativePrinciples.mode === "non-negotiable" && daysKept < weekPrincipleEntries.length
                               ? "bg-red-500"
                               : course.regulativePrinciples.mode === "non-negotiable"
                               ? "bg-green-500"
@@ -855,7 +1113,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-xs text-zinc-500 w-10 text-right">{daysKept}/{last7Entries.length}</span>
+                      <span className="text-xs text-zinc-500 w-10 text-right">{daysKept}/{weekPrincipleEntries.length}</span>
                     </div>
                   );
                 })}

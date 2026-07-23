@@ -1,6 +1,20 @@
 // IAST to Devanagari transliteration for Sanskrit vocabulary
 // Supports standard vowels, consonants, and common diacritics.
 
+// Strip diacritics from IAST text for fuzzy search matching
+// e.g. "Vyāsadeva" -> "vyasadeva", "Nārada" -> "narada"
+const diacriticMap: Record<string, string> = {
+  ā: "a", ī: "i", ū: "u", ṛ: "r", ṝ: "r", ḷ: "l",
+  ṅ: "n", ñ: "n", ṇ: "n", ṭ: "t", ḍ: "d", ś: "s", ṣ: "s",
+  ṃ: "m", ḥ: "h",
+};
+
+export function stripDiacritics(input: string): string {
+  return Array.from(input.toLowerCase())
+    .map((ch) => diacriticMap[ch] ?? ch)
+    .join("");
+}
+
 const vowelMap: Record<string, string> = {
   a: "अ",
   ā: "आ",
@@ -100,9 +114,9 @@ export function iastToDevanagari(input: string): string {
   while (i < s.length) {
     let matched = false;
 
-    // Try two-character vowels first
+    // Try compound/long vowels first
     for (const v of ["ai", "au", "ī", "ū", "ā", "ṛ", "ṝ", "ḷ"]) {
-      if (s.startsWith(v, i) && v.length === 2 && vowelDiacritics[v]) {
+      if (s.startsWith(v, i) && vowelDiacritics[v]) {
         if (prevWasConsonant) {
           result += vowelDiacritics[v];
         } else {
@@ -161,8 +175,15 @@ export function iastToDevanagari(input: string): string {
     prevWasConsonant = false;
   }
 
-  // If ended with consonant, implicit 'a' is already in the consonant form, but in Devanagari
-  // consonants with schwa are shown as consonant + no virama. So we don't need to add virama.
-  // If trailing consonant should be without schwa, the user would include 'ḥ' or 'ṃ' etc.
+  // If the input ends with a Devanagari consonant, add a virama so the final consonant
+  // has no implicit vowel (e.g. uttamam -> उत्तमम्, not उत्तमम).
+  if (prevWasConsonant) {
+    const lastChar = result.slice(-1);
+    const cp = lastChar.codePointAt(0) ?? 0;
+    if (cp >= 0x915 && cp <= 0x939) {
+      result += "्";
+    }
+  }
+
   return result;
 }

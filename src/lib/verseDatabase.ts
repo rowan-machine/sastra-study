@@ -176,6 +176,16 @@ const bgVerses: Record<string, string> = {
   "18.78": "Wherever there is Kṛṣṇa, the master of all mystics, and wherever there is Arjuna, the supreme archer, there will also certainly be opulence, victory, extraordinary power, and morality. That is my opinion.",
 };
 
+// Brahma-saṁhitā key verses
+const bsVerses: Record<string, string> = {
+  "5.33": "I worship Govinda, the primeval Lord, who by the agency of His own spiritual potency is the primeval Lord, with an abundance of diverse energies. He is the origin of all, the enjoyer of all, and the friend of all. He is the source of all incarnations, and the cause of all causes. He is the Supreme Personality of Godhead, full in six opulences, and His transcendental form is eternal, blissful and full of knowledge.",
+};
+
+// CC Madhya-līlā key verses
+const ccMadhyaVerses: Record<string, string> = {
+  "7.128": "Instruct everyone to follow the orders of Lord Śrī Kṛṣṇa as they are given in the Bhagavad-gītā and Śrīmad-Bhāgavatam. In this way become a spiritual master and try to liberate everyone in this land.",
+};
+
 // SB key verses
 const sbVerses: Record<string, string> = {
   "1.1.1": "O my Lord, Śrī Kṛṣṇa, son of Vasudeva, O all-pervading Personality of Godhead, I offer my respectful obeisances unto You. I meditate upon Lord Śrī Kṛṣṇa because He is the Absolute Truth and the primeval cause of all causes of the creation, sustenance and destruction of the manifested universes.",
@@ -218,6 +228,18 @@ export function lookupVerse(ref: string): string {
     return sbVerses[num] || "";
   }
 
+  // Brahma-saṁhitā lookup
+  if (normalized.startsWith("BS")) {
+    const num = normalized.replace(/^BS\s*/, "");
+    return bsVerses[num] || "";
+  }
+
+  // CC Madhya-līlā lookup
+  if (normalized.startsWith("CC-MADHYA")) {
+    const num = normalized.replace(/^CC-MADHYA\s*/, "");
+    return ccMadhyaVerses[num] || "";
+  }
+
   return "";
 }
 
@@ -227,6 +249,8 @@ export function lookupVerse(ref: string): string {
 export function getAvailableVerses(bookAbbr: string): string[] {
   if (bookAbbr === "BG") return Object.keys(bgVerses).map((k) => `BG ${k}`);
   if (bookAbbr === "SB") return Object.keys(sbVerses).map((k) => `SB ${k}`);
+  if (bookAbbr === "BS") return Object.keys(bsVerses).map((k) => `BS ${k}`);
+  if (bookAbbr === "CC-Madhya") return Object.keys(ccMadhyaVerses).map((k) => `CC-Madhya ${k}`);
   return [];
 }
 
@@ -235,13 +259,13 @@ export function getAvailableVerses(bookAbbr: string): string[] {
  * Returns array of { ref, text } objects.
  */
 export function getVersesInRange(
-  bookAbbr: "BG" | "SB",
+  bookAbbr: "BG" | "SB" | "BS" | "CC-Madhya",
   startCh: number,
   startVerse: number,
   endCh: number,
   endVerse: number
 ): { ref: string; text: string }[] {
-  const db = bookAbbr === "BG" ? bgVerses : sbVerses;
+  const db = bookAbbr === "BG" ? bgVerses : bookAbbr === "SB" ? sbVerses : bookAbbr === "CC-Madhya" ? ccMadhyaVerses : bsVerses;
   const results: { ref: string; text: string }[] = [];
 
   for (const [key, text] of Object.entries(db)) {

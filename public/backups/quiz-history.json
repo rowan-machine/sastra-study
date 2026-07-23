@@ -1,0 +1,107 @@
+﻿[
+    {
+        "id":  "qr-1783816115642",
+        "date":  "2026-07-12T00:28:35.642Z",
+        "quizDate":  "2026-07-11",
+        "score":  4,
+        "total":  5,
+        "percentage":  80,
+        "mode":  "recent",
+        "lookbackDays":  3,
+        "questionBreakdown":  [
+                                  {
+                                      "type":  "fill-blank",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "philosophy",
+                                      "correct":  false
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "practice",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "identify-speaker",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "application",
+                                      "correct":  true
+                                  }
+                              ]
+    },
+    {
+        "id":  "qr-1783736381061",
+        "date":  "2026-07-11T02:19:41.061Z",
+        "quizDate":  "2026-07-10",
+        "score":  3,
+        "total":  5,
+        "percentage":  60,
+        "mode":  "recent",
+        "lookbackDays":  1,
+        "questionBreakdown":  [
+                                  {
+                                      "type":  "identify-speaker",
+                                      "correct":  false
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "philosophy",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "practice",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "philosophy",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "identify-verse",
+                                      "correct":  false
+                                  }
+                              ]
+    },
+    {
+        "id":  "qr-1783649013199",
+        "date":  "2026-07-10T02:03:33.199Z",
+        "quizDate":  "2026-07-09",
+        "score":  4,
+        "total":  5,
+        "percentage":  80,
+        "mode":  "recent",
+        "lookbackDays":  1,
+        "questionBreakdown":  [
+                                  {
+                                      "type":  "identify-verse",
+                                      "correct":  false
+                                  },
+                                  {
+                                      "type":  "identify-verse",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "philosophy",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "practice",
+                                      "correct":  true
+                                  },
+                                  {
+                                      "type":  "purport",
+                                      "category":  "philosophy",
+                                      "correct":  true
+                                  }
+                              ]
+    }
+]

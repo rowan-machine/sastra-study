@@ -25,6 +25,21 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Subtle ChatGPT symbol wallpaper background */
+.bg-symbol {
+  background-image: url('/images/chatgpt-symbol-dark.png');
+  background-repeat: repeat;
+  background-position: 0 0;
+  background-size: auto 25vh;
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-symbol {
+    background-image: url('/images/chatgpt-symbol-light.png');
+  }
+}
+
 .input-field {
   width: 100%;
   padding: 0.375rem 0.5rem;

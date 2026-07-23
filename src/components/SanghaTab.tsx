@@ -1,10 +1,11 @@
 "use client";
 
-import { DevoteeContact, SanskritTerm, QuestionEntry } from "@/lib/data";
+import { DevoteeContact, SanskritTerm, QuestionEntry, LectureNote } from "@/lib/data";
 import { iastToDevanagari } from "@/lib/transliteration";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, Trash2, Users, BookText, HelpCircle, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { LecturesSection } from "@/components/LecturesSection";
 
 interface Props {
   contacts: DevoteeContact[];
@@ -13,11 +14,13 @@ interface Props {
   setVocabulary: (value: SanskritTerm[] | ((prev: SanskritTerm[]) => SanskritTerm[])) => void;
   questions: QuestionEntry[];
   setQuestions: (value: QuestionEntry[] | ((prev: QuestionEntry[]) => QuestionEntry[])) => void;
+  lectureNotes?: LectureNote[];
+  setLectureNotes?: (value: LectureNote[] | ((prev: LectureNote[]) => LectureNote[])) => void;
 }
 
 type SubTab = "contacts" | "vocabulary" | "questions";
 
-export function SanghaTab({ contacts, setContacts, vocabulary, setVocabulary, questions, setQuestions }: Props) {
+export function SanghaTab({ contacts, setContacts, vocabulary, setVocabulary, questions, setQuestions, lectureNotes = [], setLectureNotes }: Props) {
   const [subTab, setSubTab] = useState<SubTab>("contacts");
   const [search, setSearch] = useState("");
 
@@ -53,13 +56,13 @@ export function SanghaTab({ contacts, setContacts, vocabulary, setVocabulary, qu
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`Search ${subTab}...`}
-          className="input-field pl-9"
+          className="input-field !pl-10"
         />
       </div>
 
       {/* Devotee Directory */}
       {subTab === "contacts" && (
-        <ContactsSection contacts={contacts} setContacts={setContacts} search={search} />
+        <ContactsSection contacts={contacts} setContacts={setContacts} search={search} lectureNotes={lectureNotes} setLectureNotes={setLectureNotes} />
       )}
 
       {/* Sanskrit Vocabulary */}
@@ -69,15 +72,21 @@ export function SanghaTab({ contacts, setContacts, vocabulary, setVocabulary, qu
 
       {/* Questions Log */}
       {subTab === "questions" && (
-        <QuestionsSection questions={questions} setQuestions={setQuestions} search={search} />
+        <>
+          <div className="mb-3 p-3 rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200">
+            The Questions Log has moved to <strong>Reference → Prabhupāda Library → Questions Log</strong>, where you can pair each question with a Śrīla Prabhupāda source from the local corpus. This view still works, but new features (Ask Cascade, Save answer) live over there.
+          </div>
+          <QuestionsSection questions={questions} setQuestions={setQuestions} search={search} />
+        </>
       )}
     </div>
   );
 }
 
 // === CONTACTS SECTION ===
-function ContactsSection({ contacts, setContacts, search }: { contacts: DevoteeContact[]; setContacts: Props["setContacts"]; search: string }) {
+function ContactsSection({ contacts, setContacts, search, lectureNotes, setLectureNotes }: { contacts: DevoteeContact[]; setContacts: Props["setContacts"]; search: string; lectureNotes?: LectureNote[]; setLectureNotes?: Props["setLectureNotes"] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const allTags = useMemo(() => [...new Set(contacts.flatMap((c) => c.expertise))].sort(), [contacts]);
 
   const addContact = () => {
     const newContact: DevoteeContact = {
@@ -87,7 +96,7 @@ function ContactsSection({ contacts, setContacts, search }: { contacts: DevoteeC
       phone: "",
       email: "",
       expertise: [],
-      instructions: [],
+      instructions: "",
       notes: "",
     };
     setContacts((prev) => [newContact, ...prev]);
@@ -133,8 +142,8 @@ function ContactsSection({ contacts, setContacts, search }: { contacts: DevoteeC
                   {contact.role && <span className="ml-2 text-xs text-zinc-500">— {contact.role}</span>}
                 </div>
                 {contact.expertise.length > 0 && (
-                  <div className="flex gap-1">
-                    {contact.expertise.slice(0, 2).map((ex: string, idx: number) => (
+                  <div className="flex flex-wrap gap-1 justify-end max-w-[50%]">
+                    {contact.expertise.map((ex: string, idx: number) => (
                       <span key={idx} className="px-1.5 py-0.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded">{ex}</span>
                     ))}
                   </div>
@@ -210,15 +219,64 @@ function ContactsSection({ contacts, setContacts, search }: { contacts: DevoteeC
                         }}
                       />
                     </div>
+                    {allTags.filter((tag) => !contact.expertise.includes(tag)).length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-[10px] text-zinc-500 mb-1">Reuse common tags</p>
+                        <div className="flex flex-wrap gap-1">
+                          {allTags
+                            .filter((tag) => !contact.expertise.includes(tag))
+                            .map((tag) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => updateContact(contact.id, "expertise", [...contact.expertise, tag])}
+                                className="text-xs px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 transition-colors"
+                              >
+                                + {tag}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-0.5">Lectures by this Devotee</label>
+                    {setLectureNotes ? (
+                      <LecturesSection
+                        notes={lectureNotes || []}
+                        setNotes={setLectureNotes}
+                        contacts={contacts}
+                        setContacts={setContacts}
+                        restrictSpeaker={{ role: "devotee", contactId: contact.id }}
+                        embedded
+                      />
+                    ) : (
+                      <p className="text-sm text-zinc-500 py-2">Lecture notes not available.</p>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-xs text-zinc-500 mb-0.5">Instructions / Guidance Received</label>
                     <textarea
-                      value={contact.instructions.join("\n")}
-                      onChange={(e) => updateContact(contact.id, "instructions", e.target.value.split("\n").filter(Boolean))}
+                      value={contact.instructions}
+                      onChange={(e) => updateContact(contact.id, "instructions", e.target.value)}
                       className="input-field min-h-[80px]"
                       placeholder={"One instruction per line\ne.g. 'Read one chapter of SB daily'\n'Always chant your rounds before 10am'"}
                     />
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">Press Enter to separate each instruction — each line shows as its own pill in the Notes tab.</p>
+                    {(() => {
+                      const lines = (contact.instructions || "").split("\n").map((l) => l.trim()).filter(Boolean);
+                      if (lines.length === 0) return null;
+                      return (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {lines.map((line, i) => (
+                            <span key={i} className="inline-block text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-700/50 leading-tight">
+                              {line}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <button onClick={() => deleteContact(contact.id)} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors">
                     <Trash2 size={12} /> Remove
@@ -294,6 +352,7 @@ function VocabularySection({ vocabulary, setVocabulary, search }: { vocabulary: 
                       </>
                     )}
                     <button
+                      id={`term-done-${term.id}`}
                       onClick={() => setEditingTermId(isEditing ? null : term.id)}
                       className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
                     >
@@ -309,7 +368,12 @@ function VocabularySection({ vocabulary, setVocabulary, search }: { vocabulary: 
                     className="input-field text-2xl font-bold tracking-wide py-2"
                     placeholder="Sanskrit term"
                     autoFocus
-                    onBlur={() => setEditingTermId(null)}
+                    onBlur={(e) => {
+                      const next = e.relatedTarget as HTMLElement | null;
+                      if (next?.id !== `term-done-${term.id}`) {
+                        setEditingTermId(null);
+                      }
+                    }}
                   />
                 ) : (
                   <div className="min-h-[3rem] flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-amber-50/30 dark:bg-amber-950/20 px-3 py-2">
@@ -385,8 +449,10 @@ function QuestionsSection({ questions, setQuestions, search }: { questions: Ques
       context: "",
       dateAsked: format(new Date(), "yyyy-MM-dd"),
       status: "open",
+      potentialResponses: "",
       answer: "",
       source: "",
+      actionsToTake: "",
     };
     setQuestions((prev) => [newQ, ...prev]);
   };
@@ -402,10 +468,14 @@ function QuestionsSection({ questions, setQuestions, search }: { questions: Ques
   const filtered = questions.filter((q) =>
     !search || q.question.toLowerCase().includes(search.toLowerCase()) ||
     q.context.toLowerCase().includes(search.toLowerCase()) ||
-    q.answer.toLowerCase().includes(search.toLowerCase())
+    q.potentialResponses.toLowerCase().includes(search.toLowerCase()) ||
+    q.answer.toLowerCase().includes(search.toLowerCase()) ||
+    q.source.toLowerCase().includes(search.toLowerCase()) ||
+    q.actionsToTake.toLowerCase().includes(search.toLowerCase())
   );
 
   const openCount = questions.filter((q) => q.status === "open").length;
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div>
@@ -416,59 +486,144 @@ function QuestionsSection({ questions, setQuestions, search }: { questions: Ques
         </button>
       </div>
 
-      <div className="space-y-2">
-        {filtered.map((q) => (
-          <div key={q.id} className={`bg-white dark:bg-zinc-900 rounded-xl border p-4 ${
-            q.status === "resolved" ? "border-green-200 dark:border-green-800/50" : "border-amber-200 dark:border-amber-800/50"
-          }`}>
-            <div className="flex items-start gap-3">
-              <button
-                onClick={() => updateQuestion(q.id, "status", q.status === "open" ? "resolved" : "open")}
-                className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                  q.status === "resolved" ? "bg-green-500 border-green-500 text-white" : "border-amber-400 hover:border-amber-600"
-                }`}
-              >
-                {q.status === "resolved" && <span className="text-xs">✓</span>}
-              </button>
-              <div className="flex-1 space-y-2">
-                <input
-                  type="text"
-                  value={q.question}
-                  onChange={(e) => updateQuestion(q.id, "question", e.target.value)}
-                  className={`input-field font-medium ${q.status === "resolved" ? "line-through text-zinc-400" : ""}`}
-                  placeholder="What is your question?"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={q.context}
-                    onChange={(e) => updateQuestion(q.id, "context", e.target.value)}
-                    className="input-field text-sm"
-                    placeholder="Context (e.g. BG 3.37 purport)"
-                  />
-                  <input
-                    type="text"
-                    value={q.source}
-                    onChange={(e) => updateQuestion(q.id, "source", e.target.value)}
-                    className="input-field text-sm"
-                    placeholder="Who to ask / where to research"
-                  />
-                </div>
-                {q.status === "resolved" && (
+      <div className="space-y-3">
+        {filtered.map((q) => {
+          const isEditing = editingId === q.id;
+          const Field = ({
+            label,
+            value,
+            color,
+            onChange,
+            placeholder,
+          }: {
+            label: string;
+            value: string;
+            color: string;
+            onChange?: (v: string) => void;
+            placeholder?: string;
+          }) => {
+            const hasValue = value.trim().length > 0;
+            return (
+              <div className="pt-2 border-t border-amber-100 dark:border-zinc-800 first:border-0 first:pt-0">
+                <label className={`block text-[11px] font-semibold ${color} uppercase tracking-wide mb-1`}>
+                  {label}
+                </label>
+                {isEditing && onChange ? (
                   <textarea
-                    value={q.answer}
-                    onChange={(e) => updateQuestion(q.id, "answer", e.target.value)}
-                    className="input-field text-sm min-h-[60px]"
-                    placeholder="Answer / resolution..."
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="input-field text-sm min-h-[80px] w-full"
+                    placeholder={placeholder || label}
                   />
+                ) : (
+                  <div className={`text-sm ${hasValue ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 italic"} whitespace-pre-wrap leading-relaxed`}>
+                    {hasValue ? value : placeholder || "—"}
+                  </div>
                 )}
               </div>
-              <button onClick={() => deleteQuestion(q.id)} className="text-red-400 hover:text-red-600 transition-colors">
-                <Trash2 size={14} />
-              </button>
+            );
+          };
+
+          return (
+            <div key={q.id} className={`bg-white dark:bg-zinc-900 rounded-xl border p-4 ${
+              q.status === "resolved" ? "border-green-200 dark:border-green-800/50" : "border-amber-200 dark:border-amber-800/50"
+            }`}>
+              <div className="flex items-start gap-3">
+                <button
+                  onClick={() => updateQuestion(q.id, "status", q.status === "open" ? "resolved" : "open")}
+                  className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                    q.status === "resolved" ? "bg-green-500 border-green-500 text-white" : "border-amber-400 hover:border-amber-600"
+                  }`}
+                  title={q.status === "resolved" ? "Re-open question" : "Mark resolved"}
+                >
+                  {q.status === "resolved" && <span className="text-xs">✓</span>}
+                </button>
+
+                <div className="flex-1 space-y-3 min-w-0">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={q.question}
+                      onChange={(e) => updateQuestion(q.id, "question", e.target.value)}
+                      className="input-field font-medium w-full"
+                      placeholder="What is your question?"
+                    />
+                  ) : (
+                    <h3 className={`font-medium text-zinc-900 dark:text-zinc-100 ${q.status === "resolved" ? "line-through text-zinc-400" : ""}`}>
+                      {q.question || "Untitled question"}
+                    </h3>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {isEditing ? (
+                      <>
+                        <input
+                          type="text"
+                          value={q.context}
+                          onChange={(e) => updateQuestion(q.id, "context", e.target.value)}
+                          className="input-field text-sm"
+                          placeholder="Context (e.g. BG 3.37 purport)"
+                        />
+                        <input
+                          type="text"
+                          value={q.source}
+                          onChange={(e) => updateQuestion(q.id, "source", e.target.value)}
+                          className="input-field text-sm"
+                          placeholder="Who to ask / where to research"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-xs text-zinc-500">
+                          <span className="font-semibold text-zinc-600 dark:text-zinc-400">Context:</span>{" "}
+                          {q.context || <span className="italic">None</span>}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          <span className="font-semibold text-zinc-600 dark:text-zinc-400">Source:</span>{" "}
+                          {q.source || <span className="italic">Unassigned</span>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <Field
+                    label="My provisional response / reflection"
+                    value={q.potentialResponses}
+                    color="text-amber-700 dark:text-amber-300"
+                    placeholder="My own understanding before asking guru or senior devotee..."
+                    onChange={isEditing ? (v) => updateQuestion(q.id, "potentialResponses", v) : undefined}
+                  />
+                  <Field
+                    label="Received instruction / answer"
+                    value={q.answer}
+                    color="text-indigo-700 dark:text-indigo-300"
+                    placeholder="Response from guru, senior devotee, or śāstra..."
+                    onChange={isEditing ? (v) => updateQuestion(q.id, "answer", v) : undefined}
+                  />
+                  <Field
+                    label="Actions to take"
+                    value={q.actionsToTake}
+                    color="text-emerald-700 dark:text-emerald-300"
+                    placeholder="Practical commitments, practices, or changes after receiving instruction..."
+                    onChange={isEditing ? (v) => updateQuestion(q.id, "actionsToTake", v) : undefined}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => setEditingId(isEditing ? null : q.id)}
+                    className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 transition-colors text-xs font-medium"
+                  >
+                    {isEditing ? "Done" : "Edit"}
+                  </button>
+                  <button onClick={() => deleteQuestion(q.id)} className="text-red-400 hover:text-red-600 transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

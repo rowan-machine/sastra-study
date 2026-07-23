@@ -1,7 +1,7 @@
 "use client";
 
 import { WeeklyReflection } from "@/lib/data";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle } from "lucide-react";
 import { useState } from "react";
 
 interface Props {
@@ -20,7 +20,8 @@ export function WeeklyReflectionTab({ reflections, setReflections }: Props) {
 
   return (
     <div className="p-8">
-      <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-6">Weekly Reflections</h2>
+      <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-4">Sāstra Weekly Reflection</h2>
+
       <div className="space-y-2">
         {reflections.map((ref) => (
           <div
@@ -31,31 +32,33 @@ export function WeeklyReflectionTab({ reflections, setReflections }: Props) {
                 : "border-amber-200 dark:border-zinc-800"
             }`}
           >
-            <button
-              onClick={() => setExpandedWeek(expandedWeek === ref.week ? null : ref.week)}
-              className="w-full flex items-center justify-between p-4 hover:bg-amber-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
-            >
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between hover:bg-amber-50 dark:hover:bg-zinc-800/50 transition-colors">
+              <button
+                onClick={() => setExpandedWeek(expandedWeek === ref.week ? null : ref.week)}
+                className="flex-1 flex items-center gap-3 p-4 text-left"
+              >
                 <span className="font-medium text-amber-800 dark:text-amber-200">Week {ref.week}</span>
                 {ref.biggestRealization && (
                   <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate max-w-[300px]">
                     {ref.biggestRealization}
                   </span>
                 )}
-              </div>
+              </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   updateReflection(ref.week, "completed", !ref.completed);
                 }}
+                title={ref.completed ? "Mark as incomplete" : "Mark reflection as complete"}
+                className="p-4 hover:scale-110 transition-transform"
               >
                 {ref.completed ? (
                   <CheckCircle2 size={18} className="text-green-500" />
                 ) : (
-                  <XCircle size={18} className="text-zinc-300 dark:text-zinc-600" />
+                  <Circle size={18} className="text-zinc-300 dark:text-zinc-600 hover:text-amber-400" />
                 )}
               </button>
-            </button>
+            </div>
 
             {expandedWeek === ref.week && (
               <div className="border-t border-amber-100 dark:border-zinc-800 p-4 space-y-4">

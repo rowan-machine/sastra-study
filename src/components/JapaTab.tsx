@@ -2,7 +2,7 @@
 
 import { JapaEntry } from "@/lib/data";
 import { format, parseISO, subDays } from "date-fns";
-import { Plus, Flame } from "lucide-react";
+import { Plus, Flame, Info } from "lucide-react";
 import { useState } from "react";
 
 const japaQuotes = [
@@ -20,19 +20,53 @@ interface Props {
   setJapaLog: (value: JapaEntry[] | ((prev: JapaEntry[]) => JapaEntry[])) => void;
 }
 
+const focusStages: { level: number; title: string; description: string; color: string }[] = [
+  {
+    level: 1,
+    title: "Nāmāparādha (Offensive Chanting)",
+    description: "At this level, the mind is almost entirely elsewhere — caught in plans, anxieties, or sense impressions. The syllables of the mantra are on the lips but not in the heart. This is normal for beginners and even happens to experienced chanters on difficult days. The key is: you are still chanting. The holy name is so powerful that even offensive chanting gradually purifies. Don't give up — show up again tomorrow. Śrīla Bhaktivinoda Ṭhākura says: 'The holy name is like the sun, and the offenses are like clouds. Keep chanting and the clouds will pass.'",
+    color: "text-red-700 dark:text-red-300",
+  },
+  {
+    level: 2,
+    title: "Nāmābhāsa (Shadow of the Name)",
+    description: "You are partially present. The mind drifts often, but you catch it and bring it back — sometimes successfully, sometimes not. There is a faint taste forming: moments of peace, occasional feelings of connection to Kṛṣṇa. You may notice that distracted rounds feel heavier while attentive syllables feel lighter. This stage is crucial — it is where most sādhakas live for years. The practice here is patience and gentleness: each time you notice the mind has wandered, that noticing IS the practice. Return to the sound. Harināma Cintāmaṇi describes this as the stage where the sun is behind the clouds — real but obscured.",
+    color: "text-orange-700 dark:text-orange-300",
+  },
+  {
+    level: 3,
+    title: "Attentive Chanting (Steady Effort)",
+    description: "You can sustain attention on the syllables of the mahā-mantra for stretches at a time. The mind still moves, but there is a 'home base' you return to with increasing ease. You begin to notice the difference between mechanical chanting and heard chanting — when you actually hear 'Hare Kṛṣṇa' leaving your lips, the quality shifts. At this level, the practice becomes more about listening than speaking. Śrīla Prabhupāda instructs: 'Chanting means hearing. You chant with your mouth and hear with your ears.' Some days you may feel genuine peace or gratitude arising naturally from the sound.",
+    color: "text-yellow-700 dark:text-yellow-300",
+  },
+  {
+    level: 4,
+    title: "Ruci (Taste) — The Name Calls You",
+    description: "A genuine taste for the holy name is developing. You look forward to your japa time. The mantra sometimes feels like it is pulling you rather than you pushing it. Rounds that once felt like obligation now feel like refuge. You may notice that when life gets hard, your instinct is to reach for the beads. Concentration comes more naturally — not forced, but invited. The mind is quieter during japa than at other times of day. This is the fruit of years of faithful chanting through the lower stages. Śrī Caitanya Mahāprabhu describes this: 'O Holy Name, I have no taste for chanting, yet in Your causeless mercy You have appeared on my tongue.' At level 4, that mercy is becoming tangible.",
+    color: "text-green-700 dark:text-green-300",
+  },
+  {
+    level: 5,
+    title: "Āsakti / Prema-nāma (Deep Absorption)",
+    description: "This is the gold standard — rare and precious. The chanter is fully absorbed in the sound vibration. External awareness fades naturally (not forcefully). There may be tears, hair standing on end, or simply a profound stillness and warmth in the heart. The name and the Named are felt as non-different. Time passes without awareness. You are not chanting the name — the name is chanting you. This level may come in flashes during particularly grace-filled mornings, or in the association of elevated devotees. It cannot be manufactured by technique alone — it is a gift of the holy name to the sincere soul. Rūpa Gosvāmī prays: 'I do not know how much nectar the two syllables Kṛṣ-ṇa have produced. When the holy name dances in the courtyard of the heart, it conquers the activities of the mind.' Aspire to this. It is real. It is what the chanting is for.",
+    color: "text-emerald-700 dark:text-emerald-300",
+  },
+];
+
 export function JapaTab({ japaLog, setJapaLog }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const [showFocusGuide, setShowFocusGuide] = useState(false);
+  const [newEntryDate, setNewEntryDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   // Sort descending for display
   const sorted = [...japaLog].sort((a, b) => b.date.localeCompare(a.date));
 
   const addEntry = () => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    const exists = japaLog.find((e) => e.date === today);
+    const exists = japaLog.find((e) => e.date === newEntryDate);
     if (exists) return;
     setJapaLog((prev) => [
       ...prev,
-      { date: today, rounds: null, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null },
+      { date: newEntryDate, rounds: null, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null },
     ]);
   };
 
@@ -67,25 +101,82 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
   const dailyQuote = japaQuotes[new Date().getDate() % japaQuotes.length];
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100">Japa &amp; Sādhana</h2>
           <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">Chant with attention. 16 rounds, every day.</p>
         </div>
-        <button
-          onClick={addEntry}
-          className="flex items-center gap-2 px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus size={16} />
-          Log Today
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={newEntryDate}
+            onChange={(e) => setNewEntryDate(e.target.value)}
+            className="input-field text-sm"
+          />
+          <button
+            onClick={addEntry}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            Log
+          </button>
+        </div>
       </div>
 
       {/* Inspiring quote */}
       <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 rounded-xl border border-orange-200 dark:border-orange-800/50">
         <p className="text-sm italic text-orange-800 dark:text-orange-200">{dailyQuote}</p>
+      </div>
+
+      {/* Focus/Intensity Guide */}
+      <div className="mb-6">
+        <button
+          onClick={() => setShowFocusGuide(!showFocusGuide)}
+          className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 font-medium transition-colors"
+        >
+          <Info size={16} />
+          {showFocusGuide ? "Hide" : "Show"} Japa Focus &amp; Intensity Guide
+        </button>
+        {showFocusGuide && (
+          <div className="mt-4 bg-gradient-to-b from-amber-50 to-orange-50 dark:from-zinc-900 dark:to-zinc-900 rounded-2xl border border-amber-200 dark:border-zinc-700 p-6">
+            <h3 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-2">The Five Stages of Japa Focus</h3>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-5">
+              Use the focus slider (1–5) when logging your japa to honestly assess where your attention was during chanting.
+              This is not about perfection — it is about self-awareness. Honest assessment is itself a form of humility before the holy name.
+              Over time, tracking your focus reveals patterns: when you chant best, what helps, and what distracts.
+            </p>
+            <div className="space-y-6">
+              {focusStages.map((stage) => (
+                <div key={stage.level} className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-white dark:bg-zinc-800 border-2 border-amber-300 dark:border-amber-700 flex items-center justify-center font-bold text-amber-800 dark:text-amber-200">
+                    {stage.level}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className={`font-bold text-sm ${stage.color}`}>{stage.title}</h4>
+                    <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed mt-1">
+                      {stage.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 p-4 bg-white/80 dark:bg-zinc-800/80 rounded-xl border border-amber-200 dark:border-zinc-700">
+              <h4 className="font-bold text-sm text-amber-900 dark:text-amber-100 mb-2">Practical Tips for Improving Focus</h4>
+              <ul className="space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <li><strong>Chant early</strong> — The brāhma-muhūrta (1.5 hrs before sunrise) is the most sattvic time. The mind is quieter before the world wakes.</li>
+                <li><strong>Same place, same time</strong> — Regularity trains the mind to settle. Your japa spot becomes a sacred anchor.</li>
+                <li><strong>Pronounce clearly</strong> — Let each syllable be distinct: Ha-re Kṛṣ-ṇa, Ha-re Kṛṣ-ṇa, Kṛṣ-ṇa Kṛṣ-ṇa, Ha-re Ha-re.</li>
+                <li><strong>Listen, don&apos;t just speak</strong> — Prabhupāda&apos;s key instruction: chanting means hearing. Direct attention to your ears.</li>
+                <li><strong>Count inattentive rounds</strong> — Some devotees redo inattentive rounds. Even the awareness of needing to redo sharpens attention.</li>
+                <li><strong>Pray before chanting</strong> — &ldquo;O holy name, please reveal yourself to me. I am fallen but You are merciful.&rdquo;</li>
+                <li><strong>Limit pre-japa stimulation</strong> — No phone, no news, no heavy conversation before your rounds.</li>
+                <li><strong>Association</strong> — Chant with other devotees periodically. The combined vibration elevates everyone.</li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Streak hero */}
@@ -128,6 +219,7 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
             <tr className="bg-amber-100 dark:bg-zinc-800">
               <th className="p-3 text-left font-medium">Date</th>
               <th className="p-3 text-center font-medium">Rounds</th>
+              <th className="p-3 text-center font-medium">Focus</th>
               <th className="p-3 text-center font-medium">Maṅgala Āratī</th>
               <th className="p-3 text-center font-medium">Bhoga Āratī</th>
               <th className="p-3 text-center font-medium">Gaura Āratī</th>
@@ -158,6 +250,22 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
                         : ""
                     }`}
                   />
+                </td>
+                <td className="p-3 text-center">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={entry.focusLevel ?? 3}
+                      onChange={(e) => updateEntry(entry.date, "focusLevel", parseInt(e.target.value))}
+                      className="w-16 accent-amber-600"
+                      title={focusStages[(entry.focusLevel ?? 3) - 1]?.title || ""}
+                    />
+                    <span className={`text-xs font-medium ${focusStages[(entry.focusLevel ?? 3) - 1]?.color || "text-zinc-500"}`}>
+                      {entry.focusLevel ?? 3}
+                    </span>
+                  </div>
                 </td>
                 <td className="p-3 text-center">
                   <input
