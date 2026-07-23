@@ -239,7 +239,7 @@ export function Dashboard({ settings, courses, activeCourseId, curriculum, daily
     <div className="p-8 max-w-6xl mx-auto">
       <ActiveCoursesTracker courses={courses} activeCourseId={activeCourseId} onCourseSelect={onCourseSelect} />
       <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-6">
-        Śāstra Study Curriculum Dashboard
+        Śāstra Study Dashboard
       </h2>
 
       {/* Overview — always visible summary */}

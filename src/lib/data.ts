@@ -1,4 +1,4 @@
-// Types and seed data for the Sastra Study Curriculum app
+// Types and seed data for the Śāstra Study app
 
 // Verse counts per chapter for interpolating daily targets
 // Key: lowercase book name (or substring). For books not listed, a default of 40 verses/chapter is used.

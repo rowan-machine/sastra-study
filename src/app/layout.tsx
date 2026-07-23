@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Śāstra Study Curriculum",
-  description: "8-month study tracker for Vaishnava scriptures",
+  title: "Śāstra Study",
+  description: "Configurable study and sādhana tracker for Gaudiya Vaiṣṇavas",
 };
 
 export default function RootLayout({

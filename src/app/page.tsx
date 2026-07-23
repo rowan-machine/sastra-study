@@ -1770,7 +1770,7 @@ export default function Home() {
         <div className="p-4 border-b border-amber-800 dark:border-zinc-800 flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold tracking-tight">🙏 Śāstra Study</h1>
-            <p className="text-xs text-amber-200 dark:text-zinc-400 mt-0.5">8-Month Curriculum</p>
+            <p className="text-xs text-amber-200 dark:text-zinc-400 mt-0.5">Study & Sādhana Tracker</p>
           </div>
           <button
             onClick={() => setActiveTab("settings")}
