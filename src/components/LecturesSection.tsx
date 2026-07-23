@@ -577,7 +577,19 @@ export function LecturesSection({ notes, setNotes, contacts = [], setContacts, s
               {isExpanded && (
                 <div className="p-4 border-t border-amber-100 dark:border-zinc-800 space-y-4">
                   {/* Related Prabhupāda sources (from local corpus) */}
-                  <RelatedPrabhupadaSources note={note} onSaveAnswer={onSaveAnswer} />
+                  <RelatedPrabhupadaSources
+                    note={note}
+                    onSaveAnswer={onSaveAnswer}
+                    onAppendToNote={(text) => {
+                      setNotes((prev) =>
+                        prev.map((n) =>
+                          n.id === note.id
+                            ? { ...n, content: n.content ? `${n.content}\n\n---\n\n${text}` : text }
+                            : n
+                        )
+                      );
+                    }}
+                  />
                   {/* Key retention pills */}
                   {(note.keyPoints || []).length > 0 && (
                     <div>
