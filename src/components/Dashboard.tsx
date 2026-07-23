@@ -23,6 +23,7 @@ interface Props {
   contacts?: DevoteeContact[];
   spiritualMaster?: SpiritualMaster;
   onTabChange?: (tab: string, focusId?: string) => void;
+  onCourseSelect?: (courseId: string) => void;
 }
 
 function DashboardSection({ title, icon, defaultOpen = true, children }: { title: string; icon: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {
@@ -45,7 +46,7 @@ function DashboardSection({ title, icon, defaultOpen = true, children }: { title
   );
 }
 
-export function Dashboard({ settings, courses, activeCourseId, curriculum, dailyLog, bookProgress, verseMemory, japaLog, scheduleLog, tutorSessions, lectureNotes = [], contacts = [], spiritualMaster, onTabChange }: Props) {
+export function Dashboard({ settings, courses, activeCourseId, curriculum, dailyLog, bookProgress, verseMemory, japaLog, scheduleLog, tutorSessions, lectureNotes = [], contacts = [], spiritualMaster, onTabChange, onCourseSelect }: Props) {
   const today = new Date();
   const startDate = parseISO(settings.planStartDate);
   const daysSinceStart = Math.max(0, differenceInDays(today, startDate));
@@ -236,7 +237,7 @@ export function Dashboard({ settings, courses, activeCourseId, curriculum, daily
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      <ActiveCoursesTracker courses={courses} activeCourseId={activeCourseId} />
+      <ActiveCoursesTracker courses={courses} activeCourseId={activeCourseId} onCourseSelect={onCourseSelect} />
       <h2 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-6">
         Śāstra Study Curriculum Dashboard
       </h2>

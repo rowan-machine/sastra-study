@@ -9,6 +9,7 @@ interface ActiveCoursesTrackerProps {
   courses: Course[];
   activeCourseId: string;
   maxCourses?: number;
+  onCourseSelect?: (courseId: string) => void;
 }
 
 type CourseStats = {
@@ -18,7 +19,7 @@ type CourseStats = {
   totalWeeks: number;
 };
 
-export function ActiveCoursesTracker({ courses, activeCourseId, maxCourses = 3 }: ActiveCoursesTrackerProps) {
+export function ActiveCoursesTracker({ courses, activeCourseId, maxCourses = 3, onCourseSelect }: ActiveCoursesTrackerProps) {
   const [courseData, setCourseData] = useState<Record<string, CourseStats>>({});
 
   useEffect(() => {
@@ -66,12 +67,13 @@ export function ActiveCoursesTracker({ courses, activeCourseId, maxCourses = 3 }
         {activeCourses.map((c) => {
           const d = courseData[c.id] || { percent: 0, hours: 0, completedWeeks: 0, totalWeeks: 0 };
           return (
-            <div
+            <button
               key={c.id}
-              className={`p-3 rounded-lg border ${
+              onClick={() => onCourseSelect?.(c.id)}
+              className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer ${
                 c.id === activeCourseId
                   ? "border-amber-300 bg-amber-50/50 dark:bg-amber-900/10"
-                  : "border-zinc-200 dark:border-zinc-700"
+                  : "border-zinc-200 dark:border-zinc-700 hover:bg-amber-50/30 dark:hover:bg-amber-900/5 hover:border-amber-300 dark:hover:border-amber-700"
               }`}
             >
               <div className="flex justify-between items-center mb-1">
@@ -90,7 +92,7 @@ export function ActiveCoursesTracker({ courses, activeCourseId, maxCourses = 3 }
                   {d.completedWeeks}/{d.totalWeeks} weeks · {d.hours} hrs
                 </span>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

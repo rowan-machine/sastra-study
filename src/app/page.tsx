@@ -1940,6 +1940,9 @@ export default function Home() {
               if (focusId && tab === "calendar") setFocusEventId(focusId);
               setActiveTab(tab as TabId);
             }}
+            onCourseSelect={(courseId) => {
+              setActiveCourseId(courseId);
+            }}
           />
         )}
         {activeTab === "curriculum" && (
