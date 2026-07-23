@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Course, BookProgress, CurriculumWeek, DailyLogEntry } from "@/lib/data";
-import { parseISO, format } from "date-fns";
+import { parseISO, format, isWithinInterval } from "date-fns";
 import { BookOpen } from "lucide-react";
 
 interface ActiveCoursesTrackerProps {
@@ -45,8 +45,13 @@ export function ActiveCoursesTracker({ courses, activeCourseId, maxCourses = 3 }
     setCourseData(data);
   }, [courses]);
 
+  const today = new Date();
   const activeCourses = courses
-    .filter((c) => c.active || c.id === activeCourseId)
+    .filter((c) => {
+      const start = parseISO(c.startDate);
+      const end = parseISO(c.endDate);
+      return isWithinInterval(today, { start, end });
+    })
     .sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime())
     .slice(0, maxCourses);
 

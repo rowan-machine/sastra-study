@@ -82,6 +82,8 @@ export function getBookAbbreviation(bookName: string): string {
   if (lower.includes("bhakti-śāstrī") || norm.includes("bhakti-sastri") || norm.includes("bhakti sastri")) return "B Śāstrī";
   if (norm.includes("bhakti-vaibhava")) return "B Vaibhava";
   if (norm.includes("bhakti-rasamrta-sindhu (full")) return "BRS";
+  if (norm.includes("ujjvala-nilamani")) return "UN";
+  if (norm.includes("laghu-bhagavatamrta")) return "LBM";
   if (norm.includes("brhad-bhagavatamrta")) return "BB";
   if (norm.includes("brahma-samhita")) return "BS";
   if (norm.includes("caitanya-bhagavata")) return "CC-Bhāg";
@@ -855,6 +857,7 @@ export const bookChapterBreakdown: Record<string, string[]> = {
     "Western Division (Bhāva-bhakti)", "Northern Division (Prema-bhakti)",
   ],
   "ujjvala-nīlamaṇi": ["Chapters 1–7", "Chapters 8–15", "Finish book"],
+  "laghu-bhāgavatāmṛta": ["Pūrva-khaṇḍa", "Uttara-khaṇḍa — Finish"],
   "vidagdha-mādhava": ["Acts 1–4", "Acts 5–7 — Finish"],
   "lalita-mādhava": ["Acts 1–5", "Acts 6–10 — Finish"],
   "hari-bhakti-vilāsa": [
@@ -1472,6 +1475,7 @@ export const curriculumBooks = [
   // Gosvāmī literature
   "Bhakti-rasāmṛta-sindhu (full, Rūpa Gosvāmī)",
   "Ujjvala-nīlamaṇi (Rūpa Gosvāmī)",
+  "Laghu-bhāgavatāmṛta (Rūpa Gosvāmī)",
   "Vidagdha-mādhava (Rūpa Gosvāmī)",
   "Lalita-mādhava (Rūpa Gosvāmī)",
   "Hari-bhakti-vilāsa (Sanātana Gosvāmī)",
@@ -1567,7 +1571,8 @@ export const bookCategories: { label: string; books: string[] }[] = [
     label: "Gosvāmī Literature",
     books: [
       "Bhakti-rasāmṛta-sindhu (full, Rūpa Gosvāmī)", "Ujjvala-nīlamaṇi (Rūpa Gosvāmī)",
-      "Vidagdha-mādhava (Rūpa Gosvāmī)", "Lalita-mādhava (Rūpa Gosvāmī)",
+      "Laghu-bhāgavatāmṛta (Rūpa Gosvāmī)", "Vidagdha-mādhava (Rūpa Gosvāmī)",
+      "Lalita-mādhava (Rūpa Gosvāmī)",
       "Hari-bhakti-vilāsa (Sanātana Gosvāmī)", "Bṛhad-bhāgavatāmṛta (Sanātana Gosvāmī)",
       "Sat-sandarbha (Jīva Gosvāmī)", "Gopāla-campū (Jīva Gosvāmī)",
       "Mādhurya-kādambinī (Viśvanātha Cakravartī)", "Rāga-vartma-candrikā (Viśvanātha Cakravartī)",
