@@ -3,7 +3,8 @@
 import { VerseMemory, curriculumBooks, getBookAbbreviation, autoDetectPriority } from "@/lib/data";
 import { lookupVerse } from "@/lib/verseDatabase";
 import { useState, useEffect, useMemo } from "react";
-import { Filter, Plus, Search, Trash2 } from "lucide-react";
+import { slokaLibrary, SlokaEntry, Difficulty } from "@/lib/slokaLibrary";
+import { Filter, Plus, Search, Trash2, BookOpen } from "lucide-react";
 
 interface Props {
   verseMemory: VerseMemory[];
@@ -22,6 +23,8 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   const [bookSearch, setBookSearch] = useState("");
   const [quickBookSearch, setQuickBookSearch] = useState("");
   const [isQuickBookOpen, setIsQuickBookOpen] = useState(false);
+  const [slokaSearch, setSlokaSearch] = useState("");
+  const [isSlokaOpen, setIsSlokaOpen] = useState(false);
 
   const filteredBooks = useMemo(() => {
     const term = bookSearch.trim().toLowerCase();
@@ -42,6 +45,17 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
       return lowerB.includes(term) || term.includes(lowerB) || abbr.includes(term) || term.includes(abbr);
     });
   }, [quickBookSearch]);
+
+  const filteredSlokas = useMemo(() => {
+    const term = slokaSearch.trim().toLowerCase();
+    const base = term
+      ? slokaLibrary.filter((s) => {
+          const haystack = `${s.reference} ${s.source} ${s.translation} ${s.meter}`.toLowerCase();
+          return haystack.includes(term);
+        })
+      : slokaLibrary;
+    return base.slice(0, 8);
+  }, [slokaSearch]);
 
   // Close quick book dropdown when clicking outside
   useEffect(() => {
@@ -98,6 +112,44 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
 
   const deleteVerse = (id: string) => {
     setVerseMemory((prev) => prev.filter((v) => v.id !== id));
+  };
+
+  const priorityForSloka = (difficulty: Difficulty): VerseMemory["priority"] => {
+    switch (difficulty) {
+      case "easy":
+      case "easy-medium":
+      case "medium":
+        return "Core";
+      case "medium-hard":
+        return "Support";
+      case "hard":
+        return "Advanced";
+      default:
+        return "Core";
+    }
+  };
+
+  const makeVerseFromSloka = (s: SlokaEntry): VerseMemory => ({
+    id: s.id,
+    monthPhase: "Sloka Practice",
+    source: s.source,
+    versePassage: s.reference,
+    verseText: s.text,
+    theme: s.translation,
+    priority: priorityForSloka(s.difficulty),
+    learned: false,
+    meaningUnderstood: false,
+    canRecite: false,
+    review1: false,
+    review1W: false,
+    review1M: false,
+    mastered: false,
+    contextNotes: s.meter,
+    reflection: s.group || "",
+  });
+
+  const addSloka = (s: SlokaEntry) => {
+    setVerseMemory((prev) => (prev.some((v) => v.id === s.id) ? prev : [makeVerseFromSloka(s), ...prev]));
   };
 
   const handleQuickAdd = () => {
@@ -234,6 +286,60 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
           </button>
         </div>
         <p className="text-xs text-zinc-400 mt-2">Leave verse blank for whole-chapter references (e.g. KB Ch. 14)</p>
+      </div>
+
+      {/* Sloka Library */}
+      <div className="mb-6 p-4 bg-indigo-50 dark:bg-zinc-800/50 rounded-xl border border-indigo-200 dark:border-zinc-700">
+        <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300 uppercase tracking-wide mb-2">Sloka & Bhajan Library</p>
+        <button
+          onClick={() => addSloka(slokaLibrary.find((s) => s.id === "man-em2")!)}
+          className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-lg text-xs font-medium hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+          title="Add Śrī Tulasī Praṇāma as the current sloka to practice"
+        >
+          <BookOpen size={12} /> Add Śrī Tulasī Praṇāma as current
+        </button>
+        <div className="relative" data-sloka-dropdown>
+          <div className="flex items-end gap-2">
+            <div className="relative flex-1">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                value={slokaSearch}
+                onChange={(e) => {
+                  setSlokaSearch(e.target.value);
+                  setIsSlokaOpen(true);
+                }}
+                onFocus={() => setIsSlokaOpen(true)}
+                placeholder="Search slokas, bhajans, mantras..."
+                className="input-field w-full !pl-9 text-sm"
+              />
+            </div>
+          </div>
+          {isSlokaOpen && (
+            <div className="absolute z-20 mt-1 w-full max-w-xl bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 p-2">
+              <div className="max-h-64 overflow-auto space-y-1">
+                {filteredSlokas.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      addSloka(s);
+                      setSlokaSearch("");
+                      setIsSlokaOpen(false);
+                    }}
+                    className="w-full text-left px-2 py-2 rounded hover:bg-indigo-50 dark:hover:bg-zinc-800"
+                  >
+                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{s.reference}</div>
+                    <div className="text-xs text-zinc-500">{s.source} · {s.translation.slice(0, 80)}{s.translation.length > 80 ? "…" : ""}</div>
+                  </button>
+                ))}
+                {filteredSlokas.length === 0 && (
+                  <p className="text-xs text-zinc-400 px-2 py-1">No matches.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-zinc-400 mt-2">Type to search, then click an entry to add it to your verse memory.</p>
       </div>
 
       {/* Filters */}
