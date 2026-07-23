@@ -1,10 +1,18 @@
 {
-  "generatedAt": null,
+  "generatedAt": "2026-07-23T23:10:36.244Z",
   "sourceSite": "https://vedabase.cc",
   "sections": {
-    "qa": { "count": 0, "file": "qa.json" },
-    "morning-walks": { "count": 0, "file": "morning-walks.json" },
-    "lectures": { "count": 0, "file": "lectures.json" }
-  },
-  "note": "Placeholder. Run `npm run scrape:prabhupada` to populate the corpus. See README."
+    "qa": {
+      "count": 3050,
+      "file": "qa.json"
+    },
+    "lectures": {
+      "count": 0,
+      "file": "lectures.json"
+    },
+    "morning-walks": {
+      "count": 0,
+      "file": "morning-walks.json"
+    }
+  }
 }

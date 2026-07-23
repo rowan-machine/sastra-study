@@ -16,7 +16,6 @@ import type {
 // ---------- caches ----------
 let corpusManifestCache: PrabhupadaCorpusManifest | null = null;
 let seedCache: PrabhupadaEntry[] | null = null;
-const sectionCache: Partial<Record<PrabhupadaEntryType, PrabhupadaManifestEntry[]>> = {};
 const entryCache = new Map<string, PrabhupadaEntry>();
 
 const SECTION_FILES: Record<PrabhupadaEntryType, string> = {
@@ -90,7 +89,8 @@ function entryToManifest(e: PrabhupadaEntry): PrabhupadaManifestEntry {
 // ---------- fetch helpers ----------
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url, { cache: "force-cache" });
+    // Use no-store so generated manifests are always current during development.
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -106,10 +106,7 @@ export async function loadCorpusManifest(): Promise<PrabhupadaCorpusManifest | n
 }
 
 export async function loadSection(type: PrabhupadaEntryType): Promise<PrabhupadaManifestEntry[]> {
-  if (sectionCache[type]) return sectionCache[type]!;
-  const list = (await fetchJson<PrabhupadaManifestEntry[]>(SECTION_FILES[type])) || [];
-  sectionCache[type] = list;
-  return list;
+  return (await fetchJson<PrabhupadaManifestEntry[]>(SECTION_FILES[type])) || [];
 }
 
 export async function loadAllSections(): Promise<PrabhupadaManifestEntry[]> {
