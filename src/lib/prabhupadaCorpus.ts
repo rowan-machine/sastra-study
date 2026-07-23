@@ -43,14 +43,7 @@ export async function loadSeed(): Promise<PrabhupadaEntry[]> {
   return entries;
 }
 
-/**
- * Build a URL that scrolls directly to the quote on the destination page.
- * Uses the Scroll-to-Text Fragment syntax (`#:~:text=...`) supported by
- * Chromium/Edge/Safari/Firefox. Falls back to the base URL if the quote is empty.
- */
-export function sourceUrlWithFragment(baseUrl: string, text: string, maxWords = 10): string {
-  if (!text || !baseUrl) return baseUrl || "";
-  // Take the first sentence, or up to maxWords words, and normalize spaces.
+function searchQueryFrom(text: string, maxWords: number): string {
   const firstSentence = text.split(/[.!?](?:\s+|$)/, 1)[0];
   const words = firstSentence
     .replace(/\s+/g, " ")
@@ -58,6 +51,25 @@ export function sourceUrlWithFragment(baseUrl: string, text: string, maxWords = 
     .split(" ")
     .slice(0, maxWords)
     .join(" ");
+  return words || text.replace(/\s+/g, " ").trim().split(" ").slice(0, maxWords).join(" ");
+}
+
+/**
+ * Build a URL that scrolls directly to the quote on the destination page.
+ * Uses the Scroll-to-Text Fragment syntax (`#:~:text=...`) supported by
+ * Chromium/Edge/Safari/Firefox. Falls back to the base URL if the quote is empty.
+ *
+ * Vedabase.cc links now redirect to vedabase.io and lose the original page slug,
+ * so for those we build a search URL on the current vedabase.io site instead.
+ */
+export function sourceUrlWithFragment(baseUrl: string, text: string, maxWords = 10): string {
+  if (!baseUrl) return text ? `https://vedabase.io/en/search/?query=${encodeURIComponent(searchQueryFrom(text, maxWords))}` : "";
+  // Old vedabase.cc links redirect to vedabase.io and drop the path; search the quote instead.
+  if (/vedabase\.cc/.test(baseUrl)) {
+    return `https://vedabase.io/en/search/?query=${encodeURIComponent(searchQueryFrom(text, maxWords))}`;
+  }
+  if (!text) return baseUrl;
+  const words = searchQueryFrom(text, maxWords);
   if (!words) return baseUrl;
   return `${baseUrl}#:~:text=${encodeURIComponent(words)}`;
 }
