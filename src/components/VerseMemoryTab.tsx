@@ -325,6 +325,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
                     className="w-full text-left px-2 py-2 rounded hover:bg-indigo-50 dark:hover:bg-zinc-800"
                   >
                     <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{s.reference}</div>
+                    <div className="text-xs text-zinc-800 dark:text-zinc-200 font-serif whitespace-pre-wrap leading-snug">{s.text}</div>
                     <div className="text-xs text-zinc-500">{s.source} · {s.translation.slice(0, 80)}{s.translation.length > 80 ? "…" : ""}</div>
                   </button>
                 ))}
@@ -423,7 +424,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
             </div>
 
             {verse.verseText && (
-              <p className="text-sm text-zinc-700 dark:text-zinc-300 mt-2 mb-2 italic leading-relaxed border-l-2 border-indigo-200 dark:border-indigo-800 pl-3">&ldquo;{verse.verseText}&rdquo;</p>
+              <p className="text-sm text-zinc-800 dark:text-zinc-200 mt-2 mb-2 leading-relaxed border-l-2 border-indigo-200 dark:border-indigo-800 pl-3 whitespace-pre-wrap font-serif">{verse.verseText}</p>
             )}
 
             {/* Checkboxes */}
