@@ -4,7 +4,8 @@ import { VerseMemory, curriculumBooks, getBookAbbreviation, autoDetectPriority }
 import { lookupVerse } from "@/lib/verseDatabase";
 import { useState, useEffect, useMemo } from "react";
 import { slokaLibrary, SlokaEntry, Difficulty } from "@/lib/slokaLibrary";
-import { Filter, Plus, Search, Trash2, BookOpen } from "lucide-react";
+import { Filter, Plus, Search, Trash2, BookOpen, Play } from "lucide-react";
+import { SlokaPractice } from "./SlokaPractice";
 
 interface Props {
   verseMemory: VerseMemory[];
@@ -25,6 +26,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   const [isQuickBookOpen, setIsQuickBookOpen] = useState(false);
   const [slokaSearch, setSlokaSearch] = useState("");
   const [isSlokaOpen, setIsSlokaOpen] = useState(false);
+  const [practiceId, setPracticeId] = useState<string | null>(null);
 
   const filteredBooks = useMemo(() => {
     const term = bookSearch.trim().toLowerCase();
@@ -47,14 +49,15 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   }, [quickBookSearch]);
 
   const filteredSlokas = useMemo(() => {
-    const term = slokaSearch.trim().toLowerCase();
-    const base = term
+    const raw = slokaSearch.trim().toLowerCase();
+    const terms = raw.split(/\s+/).filter(Boolean);
+    const base = terms.length
       ? slokaLibrary.filter((s) => {
-          const haystack = `${s.reference} ${s.source} ${s.translation} ${s.meter}`.toLowerCase();
-          return haystack.includes(term);
+          const haystack = `${s.reference} ${s.source} ${s.translation} ${s.text} ${s.meter}`.toLowerCase();
+          return terms.every((t) => haystack.includes(t));
         })
       : slokaLibrary;
-    return base.slice(0, 8);
+    return base.slice(0, 12);
   }, [slokaSearch]);
 
   // Close quick book dropdown when clicking outside
@@ -291,13 +294,6 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
       {/* Sloka Library */}
       <div className="mb-6 p-4 bg-indigo-50 dark:bg-zinc-800/50 rounded-xl border border-indigo-200 dark:border-zinc-700">
         <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300 uppercase tracking-wide mb-2">Sloka & Bhajan Library</p>
-        <button
-          onClick={() => addSloka(slokaLibrary.find((s) => s.id === "man-em2")!)}
-          className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-lg text-xs font-medium hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
-          title="Add Śrī Tulasī Praṇāma as the current sloka to practice"
-        >
-          <BookOpen size={12} /> Add Śrī Tulasī Praṇāma as current
-        </button>
         <div className="relative" data-sloka-dropdown>
           <div className="flex items-end gap-2">
             <div className="relative flex-1">
@@ -481,6 +477,20 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
                   className="input-field text-xs"
                 />
               </div>
+                {verse.verseText && (
+                <button
+                  onClick={() => setPracticeId(practiceId === verse.id ? null : verse.id)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    practiceId === verse.id
+                      ? "bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100"
+                      : "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-900/50"
+                  }`}
+                  title="Practice this sloka with progressive blanking"
+                >
+                  <Play size={12} />
+                  {practiceId === verse.id ? "Hide practice" : "Practice"}
+                </button>
+              )}
               <button
                 onClick={() => deleteVerse(verse.id)}
                 className="text-red-400 hover:text-red-600 p-1"
@@ -489,6 +499,12 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
                 <Trash2 size={14} />
               </button>
             </div>
+
+            {practiceId === verse.id && (
+              <div className="mt-3">
+                <SlokaPractice verse={verse} onClose={() => setPracticeId(null)} />
+              </div>
+            )}
           </div>
           );
         })}
