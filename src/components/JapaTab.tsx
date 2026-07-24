@@ -1,6 +1,6 @@
 "use client";
 
-import { JapaEntry } from "@/lib/data";
+import { JapaEntry, getJapaTarget } from "@/lib/data";
 import { format, parseISO, subDays } from "date-fns";
 import { Plus, Flame, Info } from "lucide-react";
 import { useState } from "react";
@@ -78,7 +78,7 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
 
   // Stats
   const totalDays = japaLog.filter((e) => e.rounds && e.rounds > 0).length;
-  const full16Days = japaLog.filter((e) => e.rounds && e.rounds >= 16).length;
+  const full16Days = japaLog.filter((e) => e.rounds != null && e.rounds >= getJapaTarget(e.date, japaLog)).length;
   const totalRounds = japaLog.reduce((sum, e) => sum + (e.rounds || 0), 0);
 
   // Streak: consecutive days with 16 rounds
@@ -88,7 +88,7 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
     for (let i = 0; i < 365; i++) {
       const dateStr = format(subDays(today, i), "yyyy-MM-dd");
       const entry = sorted.find((e) => e.date === dateStr);
-      if (entry && entry.rounds && entry.rounds >= 16) {
+      if (entry && entry.rounds != null && entry.rounds >= getJapaTarget(dateStr, japaLog)) {
         count++;
       } else {
         break;
@@ -202,7 +202,7 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
         </div>
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4 text-center">
           <p className="text-2xl font-bold text-green-700 dark:text-green-300">{full16Days}/{totalDays}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">Full 16 Rounds</p>
+          <p className="text-xs text-zinc-500 mt-0.5">On Target</p>
         </div>
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-4 text-center">
           <p className="text-2xl font-bold text-amber-800 dark:text-amber-100">
@@ -218,7 +218,7 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
           <thead>
             <tr className="bg-amber-100 dark:bg-zinc-800">
               <th className="p-3 text-left font-medium">Date</th>
-              <th className="p-3 text-center font-medium">Rounds</th>
+              <th className="p-3 text-center font-medium">Rounds / Target</th>
               <th className="p-3 text-center font-medium">Focus</th>
               <th className="p-3 text-center font-medium">Maṅgala Āratī</th>
               <th className="p-3 text-center font-medium">Bhoga Āratī</th>
@@ -236,20 +236,23 @@ export function JapaTab({ japaLog, setJapaLog }: Props) {
                   )}
                 </td>
                 <td className="p-3 text-center">
-                  <input
-                    type="number"
-                    min="0"
-                    max="64"
-                    value={entry.rounds ?? ""}
-                    onChange={(e) => updateEntry(entry.date, "rounds", e.target.value ? parseInt(e.target.value) : null)}
-                    className={`w-16 text-center input-field ${
-                      entry.rounds && entry.rounds >= 16
-                        ? "!border-green-400 bg-green-50 dark:bg-green-950/20"
-                        : entry.rounds && entry.rounds > 0
-                        ? "!border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20"
-                        : ""
-                    }`}
-                  />
+                  <div className="flex items-center justify-center gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="64"
+                      value={entry.rounds ?? ""}
+                      onChange={(e) => updateEntry(entry.date, "rounds", e.target.value ? parseInt(e.target.value) : null)}
+                      className={`w-14 text-center input-field ${
+                        entry.rounds != null && entry.rounds >= getJapaTarget(entry.date, japaLog)
+                          ? "!border-green-400 bg-green-50 dark:bg-green-950/20"
+                          : entry.rounds != null && entry.rounds > 0
+                          ? "!border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20"
+                          : ""
+                      }`}
+                    />
+                    <span className="text-xs text-zinc-400">/ {getJapaTarget(entry.date, japaLog)}</span>
+                  </div>
                 </td>
                 <td className="p-3 text-center">
                   <div className="flex flex-col items-center gap-0.5">

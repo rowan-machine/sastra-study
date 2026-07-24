@@ -1,6 +1,6 @@
 "use client";
 
-import { ScheduleDay, scheduleItems as defaultScheduleItems, JapaEntry, SadhanaStandards, Course, StandardsChangeEntry, Settings, Guna, calcScore, TutorSession } from "@/lib/data";
+import { ScheduleDay, scheduleItems as defaultScheduleItems, JapaEntry, SadhanaStandards, Course, StandardsChangeEntry, Settings, Guna, calcScore, TutorSession, getJapaTarget } from "@/lib/data";
 import { vaisnavaEvents, isKartikaDate } from "@/lib/vaisnava-calendar";
 import { format, subDays, differenceInDays, parseISO, startOfWeek, eachDayOfInterval, endOfWeek } from "date-fns";
 import { useState, useMemo, useEffect } from "react";
@@ -103,12 +103,19 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
   const isSunday = viewDay === 0;
   const isSaturday = viewDay === 6;
   const isWeekend = isSaturday || isSunday;
+  const getFilteredScheduleItems = (dateStr: string, items: typeof activeScheduleItems) => {
+    const d = new Date(dateStr + "T12:00").getDay();
+    const isSun = d === 0;
+    const isSat = d === 6;
+    const isWknd = isSat || isSun;
+    return items.filter((item) => {
+      if (item.sundayOnly && !isSun) return false;
+      if ((item.weekdayOnly || item.key === "work") && isWknd) return false;
+      return true;
+    });
+  };
   const allEntryScheduleItems = todayEntry?.scheduleItemsSnapshot?.length ? todayEntry.scheduleItemsSnapshot : activeScheduleItems;
-  const entryScheduleItems = allEntryScheduleItems.filter((item) => {
-    if (item.sundayOnly && !isSunday) return false;
-    if ((item.weekdayOnly || item.key === "work") && isWeekend) return false;
-    return true;
-  });
+  const entryScheduleItems = getFilteredScheduleItems(viewDate, allEntryScheduleItems);
 
   const goToDay = (offset: number) => {
     const current = new Date(viewDate + "T12:00");
@@ -134,10 +141,11 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
     setTouchStart(null);
   };
 
-  const createDay = () => {
-    if (scheduleLog.find((e) => e.date === viewDate)) return;
+  const createDay = (dateOverride?: string) => {
+    const date = dateOverride || viewDate;
+    if (scheduleLog.find((e) => e.date === date)) return;
     const newDay: ScheduleDay = {
-      date: viewDate,
+      date,
       wakeUp330: false,
       showerTilak: false,
       mangalaArati: false,
@@ -156,11 +164,11 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
       noIllicitSex: false,
       sixteenRounds: false,
       obeisances: 0,
-      customItems: { ...getAutoCustomItems(viewDate, settings) },
+      customItems: { ...getAutoCustomItems(date, settings) },
       scheduleItemsSnapshot: activeScheduleItems,
       habitTracking: {},
     };
-    newDay.score = calcScore(newDay, entryScheduleItems, course?.sadhanaStandards?.obeisancesTarget);
+    newDay.score = calcScore(newDay, getFilteredScheduleItems(date, activeScheduleItems), course?.sadhanaStandards?.obeisancesTarget);
     setScheduleLog((prev) => [newDay, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
   };
 
@@ -222,12 +230,13 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
     // Sync 16 rounds completion to Japa tracker
     if (key === "sixteenRounds") {
       setJapaLog((prev) => {
+        const target = getJapaTarget(viewDate, prev);
         const existing = prev.find((j) => j.date === viewDate);
         if (existing) {
-          const rounds = newVal ? Math.max(16, existing.rounds || 16) : (existing.rounds && existing.rounds >= 16 ? 0 : existing.rounds ?? 0);
+          const rounds = newVal ? Math.max(target, existing.rounds || 0) : (existing.rounds && existing.rounds >= target ? 0 : existing.rounds ?? 0);
           return prev.map((j) => j.date === viewDate ? { ...j, rounds } : j);
         } else {
-          return [...prev, { date: viewDate, rounds: newVal ? 16 : null, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null }];
+          return [...prev, { date: viewDate, rounds: newVal ? target : null, mangalaArati: false, bhogaArati: false, gauraArati: false, prasadam: null }];
         }
       });
     }
@@ -419,7 +428,11 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
             value={viewDate}
             onChange={(e) => {
               const val = e.target.value;
-              if (val) setViewDate(val);
+              if (!val) return;
+              setViewDate(val);
+              if (val <= today && !scheduleLog.find((e) => e.date === val)) {
+                createDay(val);
+              }
             }}
             className="input-field w-auto"
           />
@@ -920,7 +933,7 @@ export function ScheduleTab({ scheduleLog, setScheduleLog, japaLog, setJapaLog, 
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-zinc-800 p-8 text-center">
           <p className="text-zinc-500 mb-3">No entry for this date yet.</p>
           <button
-            onClick={createDay}
+            onClick={() => createDay()}
             className="flex items-center gap-2 mx-auto px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <Plus size={16} />

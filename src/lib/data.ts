@@ -753,7 +753,7 @@ export interface CurriculumWeek {
   notes: string;
 }
 
-import { addWeeks, format, parseISO, differenceInDays } from "date-fns";
+import { addWeeks, format, parseISO, differenceInDays, subDays } from "date-fns";
 
 // Chapter breakdowns per book for curriculum generation.
 // Keys are substrings matched case-insensitively against book names.
@@ -2055,6 +2055,21 @@ export interface JapaEntry {
   gauraArati: boolean;
   prasadam: number | null;
   focusLevel?: number | null; // 1-5: 1=distracted, 3=moderate, 5=fully absorbed
+}
+
+export function getJapaTarget(dateStr: string, japaLog: JapaEntry[], baseRounds = 16): number {
+  const byDate = new Map(japaLog.map((e) => [e.date, e]));
+  const roundsFor = (d: string) => {
+    const e = byDate.get(d);
+    if (!e || e.rounds == null) return baseRounds;
+    return e.rounds;
+  };
+  const d = parseISO(dateStr);
+  const day1 = format(subDays(d, 1), "yyyy-MM-dd");
+  const day2 = format(subDays(d, 2), "yyyy-MM-dd");
+  const m1 = Math.max(0, baseRounds - roundsFor(day1));
+  const m2 = Math.max(0, baseRounds - roundsFor(day2));
+  return baseRounds + Math.ceil(m1 / 2) + Math.floor(m2 / 2);
 }
 
 export const seedJapaLog: JapaEntry[] = [
