@@ -61,6 +61,24 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
     return base.slice(0, 12);
   }, [slokaSearch]);
 
+  const slokaById = useMemo(() => {
+    const map: Record<string, SlokaEntry> = {};
+    for (const s of slokaLibrary) map[s.id] = s;
+    return map;
+  }, []);
+
+  useEffect(() => {
+    const next = verseMemory.map((v) => {
+      const s = slokaById[v.id];
+      if (!s) return v;
+      if (v.verseText === s.text && v.theme === s.translation) return v;
+      return { ...v, verseText: s.text, theme: s.translation };
+    });
+    if (next.some((v, i) => v !== verseMemory[i])) {
+      setVerseMemory(next);
+    }
+  }, [verseMemory, slokaById, setVerseMemory]);
+
   // Close quick book dropdown when clicking outside
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
