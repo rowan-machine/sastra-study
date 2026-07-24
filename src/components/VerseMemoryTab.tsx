@@ -71,17 +71,25 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
     return map;
   }, []);
 
+  const slokaByReference = useMemo(() => {
+    const map: Record<string, SlokaEntry> = {};
+    for (const s of slokaLibrary) map[s.reference] = s;
+    return map;
+  }, []);
+
   useEffect(() => {
     const next = verseMemory.map((v) => {
-      const s = slokaById[v.id];
+      const s = slokaById[v.id] || slokaByReference[v.versePassage];
       if (!s) return v;
-      if (v.verseText === s.text && v.theme === s.translation) return v;
-      return { ...v, verseText: s.text, theme: s.translation };
+      const nextText = s.text;
+      const nextTheme = v.theme ? v.theme : s.translation;
+      if (v.verseText === nextText && v.theme === nextTheme) return v;
+      return { ...v, verseText: nextText, theme: nextTheme };
     });
     if (next.some((v, i) => v !== verseMemory[i])) {
       setVerseMemory(next);
     }
-  }, [verseMemory, slokaById, setVerseMemory]);
+  }, [verseMemory, slokaById, slokaByReference, setVerseMemory]);
 
   // Close quick book dropdown when clicking outside
   useEffect(() => {
@@ -192,7 +200,9 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
     const bookAbbr = getBookAbbreviation(quickBook);
     const label = bookAbbr ? `${bookAbbr} ${passage}` : `${quickBook} ${passage}`;
 
-    const autoText = lookupVerse(label);
+    const sloka = slokaByReference[label];
+    const autoText = sloka ? sloka.text : lookupVerse(label);
+    const autoTheme = sloka ? sloka.translation : "";
     const detectedPriority = autoDetectPriority(label, quickBook);
     const newVerse: VerseMemory = {
       id: `v-${Date.now()}`,
@@ -200,7 +210,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
       source: quickBook,
       versePassage: label,
       verseText: autoText,
-      theme: "",
+      theme: autoTheme,
       priority: detectedPriority,
       learned: false,
       meaningUnderstood: false,
