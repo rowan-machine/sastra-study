@@ -14,6 +14,10 @@ interface Props {
   onFocusConsumed?: () => void;
 }
 
+function normalizeSearch(s: string) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFocusConsumed }: Props) {
   const [filterMonth, setFilterMonth] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
@@ -50,11 +54,11 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   }, [quickBookSearch]);
 
   const filteredSlokas = useMemo(() => {
-    const raw = slokaSearch.trim().toLowerCase();
+    const raw = normalizeSearch(slokaSearch.trim());
     const terms = raw.split(/\s+/).filter(Boolean);
     const base = terms.length
       ? slokaLibrary.filter((s) => {
-          const haystack = `${s.reference} ${s.source} ${s.translation} ${s.text} ${s.meter}`.toLowerCase();
+          const haystack = normalizeSearch(`${s.reference} ${s.source} ${s.translation} ${s.text} ${s.meter}`);
           return terms.every((t) => haystack.includes(t));
         })
       : slokaLibrary;
@@ -119,10 +123,10 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
         getBookAbbreviation(v.source || "") === getBookAbbreviation(filterBook);
       if (!sameBook) return false;
     }
-    const raw = verseSearch.trim().toLowerCase();
+    const raw = normalizeSearch(verseSearch.trim());
     const terms = raw.split(/\s+/).filter(Boolean);
     if (terms.length) {
-      const haystack = `${v.versePassage} ${v.source} ${v.theme} ${v.verseText} ${v.contextNotes} ${v.reflection}`.toLowerCase();
+      const haystack = normalizeSearch(`${v.versePassage} ${v.source} ${v.theme} ${v.verseText} ${v.contextNotes} ${v.reflection}`);
       if (!terms.every((t) => haystack.includes(t))) return false;
     }
     return true;
