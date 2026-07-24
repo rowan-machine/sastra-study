@@ -58,19 +58,16 @@ function searchQueryFrom(text: string, maxWords: number): string {
  * Uses the Scroll-to-Text Fragment syntax (`#:~:text=...`) supported by
  * Chromium/Edge/Safari/Firefox. Falls back to the base URL if the quote is empty.
  *
- * Vedabase.cc links now redirect to vedabase.io and lose the original page slug,
- * so for those we build a search URL on the current vedabase.io site instead.
+ * vedabase.cc redirects to vedabase.io but the path/slug is preserved, so we
+ * just swap the domain and keep the direct page link.
  */
 export function sourceUrlWithFragment(baseUrl: string, text: string, maxWords = 10): string {
   if (!baseUrl) return text ? `https://vedabase.io/en/search/?query=${encodeURIComponent(searchQueryFrom(text, maxWords))}` : "";
-  // Old vedabase.cc links redirect to vedabase.io and drop the path; search the quote instead.
-  if (/vedabase\.cc/.test(baseUrl)) {
-    return `https://vedabase.io/en/search/?query=${encodeURIComponent(searchQueryFrom(text, maxWords))}`;
-  }
-  if (!text) return baseUrl;
+  const directBase = baseUrl.replace(/vedabase\.cc/, "vedabase.io");
+  if (!text) return directBase;
   const words = searchQueryFrom(text, maxWords);
-  if (!words) return baseUrl;
-  return `${baseUrl}#:~:text=${encodeURIComponent(words)}`;
+  if (!words) return directBase;
+  return `${directBase}#:~:text=${encodeURIComponent(words)}`;
 }
 
 function entryToManifest(e: PrabhupadaEntry): PrabhupadaManifestEntry {
