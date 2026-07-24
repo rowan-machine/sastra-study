@@ -27,6 +27,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
   const [slokaSearch, setSlokaSearch] = useState("");
   const [isSlokaOpen, setIsSlokaOpen] = useState(false);
   const [practiceId, setPracticeId] = useState<string | null>(null);
+  const [verseSearch, setVerseSearch] = useState("");
 
   const filteredBooks = useMemo(() => {
     const term = bookSearch.trim().toLowerCase();
@@ -99,6 +100,12 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
         v.source === filterBook ||
         getBookAbbreviation(v.source || "") === getBookAbbreviation(filterBook);
       if (!sameBook) return false;
+    }
+    const raw = verseSearch.trim().toLowerCase();
+    const terms = raw.split(/\s+/).filter(Boolean);
+    if (terms.length) {
+      const haystack = `${v.versePassage} ${v.source} ${v.theme} ${v.verseText} ${v.contextNotes} ${v.reflection}`.toLowerCase();
+      if (!terms.every((t) => haystack.includes(t))) return false;
     }
     return true;
   });
@@ -382,6 +389,16 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
           <option value="Support">Support</option>
           <option value="Advanced">Advanced</option>
         </select>
+        <div className="relative">
+          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input
+            type="text"
+            value={verseSearch}
+            onChange={(e) => setVerseSearch(e.target.value)}
+            placeholder="Search verses..."
+            className="input-field text-sm !pl-9 w-48"
+          />
+        </div>
       </div>
 
       {/* Verse cards */}
@@ -403,7 +420,7 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
               }`}
             >
             <div className="flex items-start justify-between mb-2">
-              <div>
+              <div className="w-full">
                 <div className="flex items-center gap-2">
                   <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">{verse.versePassage}</h4>
                   <span
@@ -418,13 +435,22 @@ export function VerseMemoryTab({ verseMemory, setVerseMemory, focusVerseId, onFo
                     {verse.priority}
                   </span>
                 </div>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">{verse.theme}</p>
                 <p className="text-xs text-zinc-500 mt-0.5">{verse.source} · {verse.monthPhase}</p>
               </div>
             </div>
 
             {verse.verseText && (
-              <p className="text-sm text-zinc-800 dark:text-zinc-200 mt-2 mb-2 leading-relaxed border-l-2 border-indigo-200 dark:border-indigo-800 pl-3 whitespace-pre-wrap font-serif">{verse.verseText}</p>
+              <div className="mt-2 mb-2">
+                <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">{verse.monthPhase === "Sloka Practice" ? "Sanskrit" : "Verse text"}</p>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed border-l-2 border-indigo-200 dark:border-indigo-800 pl-3 whitespace-pre-wrap font-serif">{verse.verseText}</p>
+              </div>
+            )}
+
+            {verse.theme && (
+              <div className="mb-2">
+                <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Meaning</p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">{verse.theme}</p>
+              </div>
             )}
 
             {/* Checkboxes */}
